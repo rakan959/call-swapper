@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.org/shift.schema.json",
+  "title": "Shift",
+  "type": "object",
+  "required": ["id", "residentId", "startISO", "endISO", "type"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "residentId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "startISO": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "endISO": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["MOSES", "WEILER", "IP CONSULT", "NIGHT FLOAT", "BACKUP"],
+      "description": "Shift category identifier"
+    },
+    "location": {
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "startISO": {
+          "type": "string"
+        },
+        "endISO": {
+          "type": "string"
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false,
+  "examples": [
+    {
+      "id": "S123",
+      "residentId": "R17",
+      "startISO": "2025-10-02T08:00:00-04:00",
+      "endISO": "2025-10-02T20:00:00-04:00",
+      "type": "MOSES",
+      "location": "Main"
+    }
+  ]
+}

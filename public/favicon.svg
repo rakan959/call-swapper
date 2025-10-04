@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Swap Finder icon">
+  <defs>
+    <linearGradient id="swapGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#1e40af" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="url(#swapGradient)" />
+  <path
+    d="M20 24h16l-4-4 4-4H20a8 8 0 0 0-8 8v4h8zM44 40H28l4 4-4 4h16a8 8 0 0 0 8-8v-4h-8z"
+    fill="#f1f5f9"
+  />
+</svg>

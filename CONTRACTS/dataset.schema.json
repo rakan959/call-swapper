@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.org/dataset.schema.json",
+  "title": "Dataset",
+  "type": "object",
+  "required": ["residents", "shifts"],
+  "properties": {
+    "residents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "resident.schema.json"
+      }
+    },
+    "shifts": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "$ref": "shift.schema.json"
+      }
+    }
+  },
+  "unevaluatedProperties": false
+}
