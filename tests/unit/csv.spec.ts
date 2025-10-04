@@ -339,9 +339,22 @@ not-a-date,Monday,Resident One,,,,,`;
     }
   });
 
-  it('rejects blank column headers', () => {
+  it('allows blank column headers when the column is empty', () => {
+    const csv = `Date,Day,Moses Junior,Moses Senior,,Weiler,IP Consult,Backup/Angio,Night Float
+2024-10-01,Tuesday,Resident One,Resident Two,,Resident Three,,,,`;
+
+    const dataset = parseCsvToDataset(csv);
+
+    expect(dataset.shifts).toHaveLength(3);
+    const residentNames = dataset.residents
+      .map((resident) => resident.name)
+      .sort((a, b) => a.localeCompare(b));
+    expect(residentNames).toEqual(['Resident One', 'Resident Three', 'Resident Two']);
+  });
+
+  it('rejects blank column headers when populated', () => {
     const csv = `Date,Day,Moses Junior,,Weiler,IP Consult,Backup/Angio,Night Float
-2024-10-01,Tuesday,Resident One,,Resident Three,,,,`;
+2024-10-01,Tuesday,Resident One,Unexpected Resident,Resident Three,,,,`;
 
     expect(() => parseCsvToDataset(csv)).toThrow(CsvValidationError);
     try {

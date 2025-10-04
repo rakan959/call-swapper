@@ -202,14 +202,6 @@ function parseGridCsv(
     issues.push({ row: 1, column: label, message: 'Duplicate column header detected' });
   });
 
-  blankHeaderIndexes.forEach((index) => {
-    issues.push({
-      row: 1,
-      column: `Column ${index + 1}`,
-      message: 'Blank column header detected',
-    });
-  });
-
   const resolvedColumns = GRID_SHIFT_CONFIGS.map((config) => {
     const resolvedHeader = config.headerVariants
       .map((variant) => headerLookup.get(normalizeHeader(variant)))
@@ -231,6 +223,34 @@ function parseGridCsv(
     headerLookup.get('day-of-week');
   if (!dateHeader) {
     issues.push({ row: 1, column: 'Date', message: 'Missing required column' });
+  }
+
+  if (blankHeaderIndexes.length > 0) {
+    const fieldKeys = parsed.meta.fields ?? [];
+    const rows = parsed.data;
+
+    blankHeaderIndexes.forEach((index) => {
+      const columnLabel = `Column ${index + 1}`;
+      const fieldKey = fieldKeys[index] ?? '';
+      const hasData = rows.some((row) => {
+        if (!row) return false;
+        if (fieldKey in row) {
+          const value = row[fieldKey];
+          return typeof value === 'string' && value.trim().length > 0;
+        }
+        const values = Object.values(row);
+        const rawValue = values[index];
+        return typeof rawValue === 'string' && rawValue.trim().length > 0;
+      });
+
+      if (hasData) {
+        issues.push({
+          row: 1,
+          column: columnLabel,
+          message: 'Blank column header detected',
+        });
+      }
+    });
   }
 
   if (issues.length > 0) {
