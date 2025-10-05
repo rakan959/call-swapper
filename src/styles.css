@@ -204,6 +204,18 @@ body {
   color: #e2e8f0;
 }
 
+.side-panel-layer {
+  display: contents;
+}
+
+.side-panel-layer__scrim {
+  display: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+
 .side-panel {
   background: linear-gradient(165deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.92) 100%);
   border-radius: 1.25rem;
@@ -470,6 +482,8 @@ body {
 .calendar-panel__calendar {
   width: 100%;
   min-height: 24rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .legend-panel h2 {
@@ -1215,6 +1229,239 @@ body {
   color: var(--color-danger);
 }
 
+@media (max-width: 959px) {
+  .app__header {
+    padding: 1.5rem clamp(1rem, 4vw, 1.85rem) 1.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.35rem;
+  }
+
+  .app__header > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .app__tagline {
+    max-width: none;
+  }
+
+  .resident-filter {
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+
+  .resident-filter select {
+    width: 100%;
+  }
+
+  .app__main {
+    padding: clamp(1rem, 4vw, 1.5rem);
+    gap: 1.25rem;
+  }
+
+  .calendar-panel,
+  .legend-panel,
+  .best-swaps-panel,
+  .all-swaps-panel,
+  .status-panel {
+    padding: clamp(0.9rem, 3vw, 1.4rem);
+    border-radius: 1.05rem;
+  }
+
+  .legend-list {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .best-swaps-panel__header,
+  .all-swaps-panel__header,
+  .swap-panel__header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.9rem;
+  }
+
+  .best-swaps-panel__action,
+  .swap-panel__action,
+  .all-swaps-panel__settings-toggle {
+    width: 100%;
+  }
+
+  .all-swaps-panel__settings {
+    width: 100%;
+    justify-content: flex-end;
+    align-self: stretch;
+  }
+
+  .swap-panel__controls,
+  .all-swaps-panel__controls {
+    grid-template-columns: 1fr;
+  }
+
+  .pressure-breakdown__section {
+    overflow-x: auto;
+  }
+
+  .pressure-breakdown__table {
+    min-width: 20rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .app__main {
+    padding: clamp(0.9rem, 4vw, 1.25rem);
+  }
+
+  .app__header h1 {
+    font-size: clamp(1.5rem, 6.5vw, 2.15rem);
+  }
+
+  .app__tagline {
+    font-size: clamp(0.95rem, 4vw, 1.05rem);
+  }
+
+  .calendar-panel__calendar {
+    min-height: 20rem;
+    margin: -0.25rem;
+    padding: 0.25rem;
+    border-radius: 1rem;
+  }
+
+  .calendar-panel__calendar .fc {
+    min-width: 32rem;
+  }
+
+  .legend-item {
+    font-size: 0.95rem;
+  }
+
+  .best-swaps-panel__subtitle,
+  .all-swaps-panel__subtitle,
+  .swap-panel__subtitle {
+    max-width: none;
+  }
+
+  .best-swaps-panel__row,
+  .all-swaps-panel__row,
+  .swap-panel__row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+    padding-right: 2.5rem;
+  }
+
+  .best-swaps-panel__row::after,
+  .all-swaps-panel__row::after,
+  .swap-panel__row::after {
+    top: 0.85rem;
+  }
+
+  .best-swaps-panel__cell,
+  .all-swaps-panel__cell,
+  .swap-panel__cell {
+    font-size: 0.92rem;
+  }
+
+  .best-swaps-panel__cell:not(:first-child),
+  .all-swaps-panel__cell:not(:first-child),
+  .swap-panel__cell:not(:first-child) {
+    margin-top: 0.35rem;
+  }
+
+  .best-swaps-panel__cell--score,
+  .all-swaps-panel__cell--score,
+  .swap-panel__cell--score,
+  .all-swaps-panel__cell--average {
+    justify-self: flex-start;
+  }
+
+  .pressure-breakdown__table {
+    font-size: 0.8rem;
+  }
+
+  .side-panel-layer {
+    display: grid;
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    align-items: flex-end;
+    justify-items: center;
+    padding: 3.5rem 1rem 1.25rem;
+    pointer-events: none;
+  }
+
+  .side-panel-layer__scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.55);
+    pointer-events: auto;
+    cursor: pointer;
+    z-index: 0;
+  }
+
+  .side-panel-layer__scrim:focus-visible {
+    outline: 3px solid rgba(56, 189, 248, 0.55);
+    outline-offset: 2px;
+  }
+
+  .side-panel {
+    pointer-events: auto;
+    width: min(40rem, calc(100% - 2rem));
+    max-height: calc(100vh - 6rem);
+    overflow-y: auto;
+    transform-origin: center bottom;
+    animation: side-panel-slide-up 220ms ease-out;
+    position: relative;
+    z-index: 1;
+  }
+}
+
+@media (max-width: 600px) {
+  .app__main {
+    padding: clamp(0.75rem, 4.5vw, 1rem);
+    gap: 1rem;
+  }
+
+  .calendar-panel,
+  .legend-panel,
+  .best-swaps-panel,
+  .all-swaps-panel,
+  .status-panel {
+    padding: clamp(0.8rem, 4vw, 1.1rem);
+  }
+
+  .best-swaps-panel__cell,
+  .all-swaps-panel__cell,
+  .swap-panel__cell {
+    font-size: 0.9rem;
+  }
+
+  .all-swaps-panel__cell--average {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .best-swaps-panel__breakdown.pressure-breakdown,
+  .all-swaps-panel__breakdown.pressure-breakdown,
+  .swap-panel__breakdown.pressure-breakdown {
+    grid-template-columns: 1fr;
+  }
+}
+
+@keyframes side-panel-slide-up {
+  from {
+    transform: translateY(12%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 @media (min-width: 960px) {
   .app__main {
     display: grid;
@@ -1328,4 +1575,45 @@ body {
 .fc .fc-daygrid-day-frame {
   background-color: transparent;
   padding: 0.35rem;
+}
+
+.fc .fc-list-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 1rem;
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.78);
+  box-shadow: 0 16px 28px rgba(2, 6, 23, 0.45);
+}
+
+.fc .fc-list-day-cushion,
+.fc .fc-list-table td {
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+.fc .fc-list-day-cushion {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #e2e8f0;
+  background: rgba(17, 24, 39, 0.85);
+}
+
+.fc .fc-list-day-text,
+.fc .fc-list-day-side-text {
+  color: #e2e8f0;
+}
+
+.fc .fc-list-event-dot {
+  border-color: var(--color-accent);
+}
+
+.fc .fc-list-event td {
+  background-color: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.fc .fc-list-event:hover td {
+  background-color: rgba(56, 189, 248, 0.12);
 }

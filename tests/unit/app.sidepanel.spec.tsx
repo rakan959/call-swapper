@@ -15,8 +15,19 @@ type CalendarEvent = {
   id: string;
 };
 
+type CalendarHeaderToolbar = {
+  left?: string;
+  center?: string;
+  right?: string;
+};
+
 type CalendarOptions = {
+  initialView?: string;
+  headerToolbar?: CalendarHeaderToolbar;
+  stickyHeaderDates?: boolean;
+  datesSet?: () => void;
   eventClick?: (info: { event: { id: string } }) => void;
+  events?: CalendarEvent[];
 };
 
 type CalendarStubInstance = {
@@ -26,6 +37,9 @@ type CalendarStubInstance = {
   destroy(): void;
   removeAllEventSources(): void;
   addEventSource(events: CalendarEvent[]): void;
+  setOption(name: string, value: unknown): void;
+  changeView(viewName: string): void;
+  view: { type: string };
 };
 
 const calendarInstances = vi.hoisted(() => [] as CalendarStubInstance[]) as CalendarStubInstance[];
@@ -44,9 +58,11 @@ vi.mock('@fullcalendar/core', () => {
   class CalendarStub implements CalendarStubInstance {
     public options: CalendarOptions;
     public eventSources: CalendarEvent[][] = [];
+    public view: { type: string };
 
     constructor(_element: HTMLElement, options: CalendarOptions) {
-      this.options = options;
+      this.options = { ...options };
+      this.view = { type: options.initialView ?? 'dayGridMonth' };
       calendarInstances.push(this);
     }
 
@@ -64,6 +80,19 @@ vi.mock('@fullcalendar/core', () => {
 
     addEventSource(events: CalendarEvent[]): void {
       this.eventSources.push(events);
+    }
+
+    setOption(name: string, value: unknown): void {
+      if (name === 'headerToolbar') {
+        this.options.headerToolbar = value as CalendarHeaderToolbar;
+      } else if (name === 'stickyHeaderDates') {
+        this.options.stickyHeaderDates = value as boolean;
+      }
+    }
+
+    changeView(viewName: string): void {
+      this.view = { type: viewName };
+      this.options.datesSet?.();
     }
   }
 

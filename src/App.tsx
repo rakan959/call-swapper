@@ -4,6 +4,7 @@ import { Calendar, EventSourceInput } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
+import listPlugin from '@fullcalendar/list';
 import {
   Dataset,
   Resident,
@@ -614,20 +615,30 @@ export default function App(): JSX.Element {
   const bestSwapsRequestTokenRef = useRef(0);
 
   useEffect(() => {
-    if (!calendarContainerRef.current) {
+    const container = calendarContainerRef.current;
+    if (!container) {
       return;
     }
 
-    const calendar = new Calendar(calendarContainerRef.current, {
-      plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
-      initialView: 'dayGridMonth',
-      headerToolbar: {
-        left: 'prev,next today',
-        center: 'title',
-        right: 'dayGridMonth,timeGridWeek',
-      },
+    const supportsMatchMedia =
+      typeof window !== 'undefined' && typeof window.matchMedia === 'function';
+    const mediaQuery = supportsMatchMedia ? window.matchMedia('(max-width: 768px)') : null;
+
+    const resolveHeaderToolbar = (compact: boolean) => ({
+      left: 'prev,next today',
+      center: 'title',
+      right: compact ? 'listWeek,dayGridMonth' : 'dayGridMonth,timeGridWeek',
+    });
+
+    const initialCompact = mediaQuery?.matches ?? false;
+
+    const calendar = new Calendar(container, {
+      plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin],
+      initialView: initialCompact ? 'listWeek' : 'dayGridMonth',
+      headerToolbar: resolveHeaderToolbar(initialCompact),
       height: 'auto',
-      stickyHeaderDates: true,
+      stickyHeaderDates: !initialCompact,
+      expandRows: true,
       eventDisplay: 'block',
       events: [],
       datesSet: () => {
@@ -638,11 +649,45 @@ export default function App(): JSX.Element {
       },
     });
 
+    const applyResponsiveOptions = (compact: boolean) => {
+      calendar.setOption('headerToolbar', resolveHeaderToolbar(compact));
+      calendar.setOption('stickyHeaderDates', !compact);
+      if (compact) {
+        if (calendar.view?.type !== 'listWeek') {
+          calendar.changeView('listWeek');
+        }
+      } else if (calendar.view?.type === 'listWeek') {
+        calendar.changeView('dayGridMonth');
+      }
+    };
+
+    let handleMediaChange: ((event: MediaQueryListEvent) => void) | null = null;
+    if (mediaQuery) {
+      handleMediaChange = (event) => {
+        applyResponsiveOptions(event.matches);
+      };
+
+      if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', handleMediaChange);
+      } else if (typeof mediaQuery.addListener === 'function') {
+        mediaQuery.addListener(handleMediaChange);
+      }
+    }
+
     calendar.render();
     calendarRef.current = calendar;
     rotationColumnSyncRef.current();
 
+    applyResponsiveOptions(initialCompact);
+
     return () => {
+      if (mediaQuery && handleMediaChange) {
+        if (typeof mediaQuery.removeEventListener === 'function') {
+          mediaQuery.removeEventListener('change', handleMediaChange);
+        } else if (typeof mediaQuery.removeListener === 'function') {
+          mediaQuery.removeListener(handleMediaChange);
+        }
+      }
       calendar.destroy();
       calendarRef.current = null;
     };
@@ -1334,13 +1379,21 @@ export default function App(): JSX.Element {
         </section>
 
         {selectedShift && selectedPalette && dataset && (
-          <SidePanel
-            shift={selectedShift}
-            resident={selectedResident}
-            palette={selectedPalette}
-            dataset={dataset}
-            onClose={() => setSelectedShiftId(null)}
-          />
+          <div className="side-panel-layer">
+            <button
+              type="button"
+              className="side-panel-layer__scrim"
+              aria-label="Dismiss shift details overlay"
+              onClick={() => setSelectedShiftId(null)}
+            />
+            <SidePanel
+              shift={selectedShift}
+              resident={selectedResident}
+              palette={selectedPalette}
+              dataset={dataset}
+              onClose={() => setSelectedShiftId(null)}
+            />
+          </div>
         )}
         <section className="best-swaps-panel" aria-label="Top swap suggestions">
           <header className="best-swaps-panel__header">

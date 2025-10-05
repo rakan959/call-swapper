@@ -415,6 +415,45 @@ export function SidePanel({
   dataset,
   onClose,
 }: SidePanelProps): JSX.Element {
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') {
+      return;
+    }
+    if (typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+    if (!mediaQuery.matches) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleChange = () => {
+      if (!mediaQuery.matches) {
+        document.body.style.overflow = previousOverflow;
+      } else {
+        document.body.style.overflow = 'hidden';
+      }
+    };
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+    } else if (typeof mediaQuery.addListener === 'function') {
+      mediaQuery.addListener(handleChange);
+    }
+
+    return () => {
+      if (typeof mediaQuery.removeEventListener === 'function') {
+        mediaQuery.removeEventListener('change', handleChange);
+      } else if (typeof mediaQuery.removeListener === 'function') {
+        mediaQuery.removeListener(handleChange);
+      }
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
   const dateLabel = formatShiftDateLabel(shift);
   const typeValue = shift.location ?? palette.label;
 
