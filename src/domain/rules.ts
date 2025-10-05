@@ -388,6 +388,7 @@ function evaluatePair(
 ): SwapAdvisory[] {
   const advisories: SwapAdvisory[] = [];
   const involvesSoftType = softTypes.has(prev.type) || softTypes.has(current.type);
+  const bothBackups = prev.type === 'BACKUP' && current.type === 'BACKUP';
 
   if (hasOverlap(prev.startISO, prev.endISO, current.startISO, current.endISO)) {
     if (involvesSoftType) {
@@ -405,6 +406,9 @@ function evaluatePair(
   if (restHoursMin > 0) {
     const restHours = dayjs(current.startISO).diff(dayjs(prev.endISO), 'hour', true);
     if (restHours < restHoursMin) {
+      if (bothBackups) {
+        return advisories;
+      }
       if (involvesSoftType) {
         advisories.push(
           buildRestAdvisory(prev, current, resident, softTypes, restHours, restHoursMin),

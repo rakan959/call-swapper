@@ -141,6 +141,33 @@ describe('validateResidentTimeline', () => {
     expect(advisories[0]?.code).toBe('REST_WINDOW');
   });
 
+  it('ignores rest window checks between consecutive backup shifts', () => {
+    const resident = buildResident('R1', ['BACKUP']);
+    const firstBackup = buildShift(
+      'B1',
+      'R1',
+      '2025-10-01T08:00:00Z',
+      '2025-10-01T16:00:00Z',
+      'BACKUP',
+    );
+    const secondBackup = buildShift(
+      'B2',
+      'R1',
+      '2025-10-01T16:00:00Z',
+      '2025-10-01T23:00:00Z',
+      'BACKUP',
+    );
+
+    const advisories = validateResidentTimeline(
+      [firstBackup, secondBackup],
+      { ...baseRuleConfig, restHoursMin: 8 },
+      resident,
+      { softTypes: new Set(['BACKUP']) },
+    );
+
+    expect(advisories).toHaveLength(0);
+  });
+
   it('treats spring forward rest gaps below minimum as violations', () => {
     const config: RuleConfig = { ...baseRuleConfig, restHoursMin: 8 };
     const resident = buildResident('R1', ['MOSES']);
