@@ -491,8 +491,8 @@ describe('App side panel selection', () => {
     });
 
     await screen.findByRole('heading', { name: 'Alice Rivers' });
-  const swapSection = await screen.findByRole('region', { name: /swap finder/i });
-  const action = within(swapSection).getByRole('button', { name: /find swaps/i });
+    const swapSection = await screen.findByRole('region', { name: /swap finder/i });
+    const action = within(swapSection).getByRole('button', { name: /find swaps/i });
     fireEvent.click(action);
 
     await waitFor(() => {
@@ -555,8 +555,8 @@ describe('App side panel selection', () => {
     });
 
     await screen.findByRole('heading', { name: 'Alice Rivers' });
-  const swapSection = await screen.findByRole('region', { name: /swap finder/i });
-  const action = within(swapSection).getByRole('button', { name: /find swaps/i });
+    const swapSection = await screen.findByRole('region', { name: /swap finder/i });
+    const action = within(swapSection).getByRole('button', { name: /find swaps/i });
     fireEvent.click(action);
 
     await within(swapSection).findByRole('list', { name: /swap suggestions/i });
@@ -664,7 +664,7 @@ describe('App side panel selection', () => {
       expect(findBestSwapsMock).toHaveBeenCalledTimes(1);
     });
 
-  const list = await screen.findByRole('list', { name: /top 10 swap suggestions/i });
+    const list = await screen.findByRole('list', { name: /top 10 swap suggestions/i });
     const items = within(list)
       .getAllByRole('listitem')
       .filter((item) => item.parentElement === list);
@@ -846,7 +846,7 @@ describe('App side panel selection', () => {
     expect(initialMessage.textContent ?? '').toContain('1 swap suggestion');
 
     await waitFor(() => {
-  const list = screen.getByRole('list', { name: 'Top 10 swap suggestions' });
+      const list = screen.getByRole('list', { name: 'Top 10 swap suggestions' });
       expect(within(list).getAllByRole('button')).toHaveLength(1);
     });
 
@@ -865,7 +865,7 @@ describe('App side panel selection', () => {
     });
 
     await waitFor(() => {
-  const list = screen.getByRole('list', { name: 'Top 10 swap suggestions' });
+      const list = screen.getByRole('list', { name: 'Top 10 swap suggestions' });
       expect(within(list).getAllByRole('button')).toHaveLength(2);
     });
 
@@ -877,7 +877,7 @@ describe('App side panel selection', () => {
     expect(restoredMessage.textContent ?? '').toContain('1 swap suggestion');
 
     await waitFor(() => {
-  const list = screen.getByRole('list', { name: 'Top 10 swap suggestions' });
+      const list = screen.getByRole('list', { name: 'Top 10 swap suggestions' });
       expect(within(list).getAllByRole('button')).toHaveLength(1);
     });
   });
@@ -907,7 +907,7 @@ describe('App side panel selection', () => {
       expect(findBestSwapsMock).toHaveBeenCalledTimes(1);
     });
 
-  const topList = await screen.findByRole('list', { name: /top 10 swap suggestions/i });
+    const topList = await screen.findByRole('list', { name: /top 10 swap suggestions/i });
     await waitFor(() => {
       const items = within(topList)
         .getAllByRole('listitem')
@@ -950,7 +950,7 @@ describe('App side panel selection', () => {
 
     const emptyState = await screen.findByText('No swap suggestions match the current filters.');
     expect(emptyState).toBeTruthy();
-  expect(screen.queryByRole('list', { name: 'Top 10 swap suggestions' })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Top 10 swap suggestions' })).toBeNull();
 
     const settingsToggle = screen.getByRole('button', { name: 'Settings' });
     fireEvent.click(settingsToggle);
@@ -969,7 +969,7 @@ describe('App side panel selection', () => {
     fireEvent.click(hideTotalCheckbox);
 
     await waitFor(() => {
-  const list = screen.getByRole('list', { name: 'Top 10 swap suggestions' });
+      const list = screen.getByRole('list', { name: 'Top 10 swap suggestions' });
       expect(within(list).getAllByRole('button')).toHaveLength(2);
     });
 
@@ -981,7 +981,7 @@ describe('App side panel selection', () => {
     fireEvent.click(hideTotalCheckbox);
 
     await waitFor(() => {
-  expect(screen.queryByRole('list', { name: 'Top 10 swap suggestions' })).toBeNull();
+      expect(screen.queryByRole('list', { name: 'Top 10 swap suggestions' })).toBeNull();
     });
 
     const restoredEmptyState = await screen.findByText(

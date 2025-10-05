@@ -38,7 +38,12 @@ import {
   SortDirection,
   SwapSortKey,
 } from '@domain/swapSort';
-import { getAverageScore, getCounterpartScore, getMyScore, getTotalScore } from '@utils/swapMetrics';
+import {
+  getAverageScore,
+  getCounterpartScore,
+  getMyScore,
+  getTotalScore,
+} from '@utils/swapMetrics';
 import { filterCandidatesBySettings } from '@utils/swapFilters';
 import { loadSwapSettings, saveSwapSettings, SwapSettings } from '@domain/swapSettings';
 import { debugError, debugLog } from '@utils/debug';
@@ -117,8 +122,8 @@ function AllSwapsList({
           residentNameById.get(candidate.b.residentId) ?? candidate.b.residentId;
         const originalShiftDate = dateFormatter.format(new Date(candidate.a.startISO));
         const counterpartShiftDate = dateFormatter.format(new Date(candidate.b.startISO));
-  const scoreLabel = `${formatScore(getMyScore(candidate))}|${formatScore(getCounterpartScore(candidate))}|${formatScore(getTotalScore(candidate))}`;
-  const averageLabel = formatScore(getAverageScore(candidate));
+        const scoreLabel = `${formatScore(getMyScore(candidate))}|${formatScore(getCounterpartScore(candidate))}|${formatScore(getTotalScore(candidate))}`;
+        const averageLabel = formatScore(getAverageScore(candidate));
         const originalResident = residentsById.get(candidate.a.residentId);
         const counterpartResident = residentsById.get(candidate.b.residentId);
         const originalRotations = buildRotationPair(
@@ -415,9 +420,7 @@ function AllSwapsPanel({
     );
   }
 
-  return (
-    <div className="all-swaps-panel">{body}</div>
-  );
+  return <div className="all-swaps-panel">{body}</div>;
 }
 
 export default function App(): JSX.Element {
@@ -467,10 +470,7 @@ export default function App(): JSX.Element {
       if (!swapSettingsContainerRef.current) {
         return;
       }
-      if (
-        event.target instanceof Node &&
-        swapSettingsContainerRef.current.contains(event.target)
-      ) {
+      if (event.target instanceof Node && swapSettingsContainerRef.current.contains(event.target)) {
         return;
       }
       setIsSwapSettingsOpen(false);
@@ -512,9 +512,7 @@ export default function App(): JSX.Element {
 
   const defaultSortDirectionText = useMemo(() => {
     if (swapSettings.defaultSortKey === 'date') {
-      return swapSettings.defaultSortDirection === 'desc'
-        ? 'Latest → Soonest'
-        : 'Soonest → Latest';
+      return swapSettings.defaultSortDirection === 'desc' ? 'Latest → Soonest' : 'Soonest → Latest';
     }
     return swapSettings.defaultSortDirection === 'desc' ? 'High → Low' : 'Low → High';
   }, [swapSettings.defaultSortDirection, swapSettings.defaultSortKey]);
@@ -1107,13 +1105,15 @@ export default function App(): JSX.Element {
           </p>
         )}
 
-        {bestSwapsState.status === 'ready' && hiddenBestSwapsCount > 0 && topBestSwaps.length > 0 && (
-          <p className="best-swaps-panel__filters">
-            {hiddenBestSwapsCount === 1
-              ? '1 swap suggestion is hidden by the current filters.'
-              : `${hiddenBestSwapsCount} swap suggestions are hidden by the current filters.`}
-          </p>
-        )}
+        {bestSwapsState.status === 'ready' &&
+          hiddenBestSwapsCount > 0 &&
+          topBestSwaps.length > 0 && (
+            <p className="best-swaps-panel__filters">
+              {hiddenBestSwapsCount === 1
+                ? '1 swap suggestion is hidden by the current filters.'
+                : `${hiddenBestSwapsCount} swap suggestions are hidden by the current filters.`}
+            </p>
+          )}
 
         {bestSwapsState.status === 'ready' && topBestSwaps.length === 0 && (
           <p className="best-swaps-panel__empty">
@@ -1128,132 +1128,132 @@ export default function App(): JSX.Element {
             <h3 className="best-swaps-panel__section-title">Top 10 swap suggestions</h3>
             <ol className="best-swaps-panel__list" aria-label="Top 10 swap suggestions">
               {topBestSwaps.map((candidate) => {
-              const aResidentName =
-                residentNameById.get(candidate.a.residentId) ?? candidate.a.residentId;
-              const bResidentName =
-                residentNameById.get(candidate.b.residentId) ?? candidate.b.residentId;
-              const aStart = new Date(candidate.a.startISO);
-              const bStart = new Date(candidate.b.startISO);
-              const aDate = bestSwapDateFormatter.format(aStart);
-              const bDate = bestSwapDateFormatter.format(bStart);
-              const aShiftLabel = SHIFT_PALETTE[candidate.a.type].label;
-              const bShiftLabel = SHIFT_PALETTE[candidate.b.type].label;
-              const originalResident = residentsById.get(candidate.a.residentId);
-              const counterpartResident = residentsById.get(candidate.b.residentId);
-              const originalRotations = buildRotationPair(
-                originalResident,
-                candidate.a.startISO,
-                candidate.b.startISO,
-              );
-              const counterpartRotations = buildRotationPair(
-                counterpartResident,
-                candidate.b.startISO,
-                candidate.a.startISO,
-              );
-              const swapKey = `${candidate.a.id}-${candidate.b.id}`;
-              const isExpanded = expandedSwapId === swapKey;
-              const scoreLabel = `${formatScore(candidate.pressure.original.deltaTotal)}|${formatScore(candidate.score)}`;
+                const aResidentName =
+                  residentNameById.get(candidate.a.residentId) ?? candidate.a.residentId;
+                const bResidentName =
+                  residentNameById.get(candidate.b.residentId) ?? candidate.b.residentId;
+                const aStart = new Date(candidate.a.startISO);
+                const bStart = new Date(candidate.b.startISO);
+                const aDate = bestSwapDateFormatter.format(aStart);
+                const bDate = bestSwapDateFormatter.format(bStart);
+                const aShiftLabel = SHIFT_PALETTE[candidate.a.type].label;
+                const bShiftLabel = SHIFT_PALETTE[candidate.b.type].label;
+                const originalResident = residentsById.get(candidate.a.residentId);
+                const counterpartResident = residentsById.get(candidate.b.residentId);
+                const originalRotations = buildRotationPair(
+                  originalResident,
+                  candidate.a.startISO,
+                  candidate.b.startISO,
+                );
+                const counterpartRotations = buildRotationPair(
+                  counterpartResident,
+                  candidate.b.startISO,
+                  candidate.a.startISO,
+                );
+                const swapKey = `${candidate.a.id}-${candidate.b.id}`;
+                const isExpanded = expandedSwapId === swapKey;
+                const scoreLabel = `${formatScore(candidate.pressure.original.deltaTotal)}|${formatScore(candidate.score)}`;
 
-              return (
-                <li
-                  key={swapKey}
-                  className={`best-swaps-panel__item${isExpanded ? ' best-swaps-panel__item--expanded' : ''}`}
-                >
-                  <button
-                    type="button"
-                    className="best-swaps-panel__row"
-                    aria-expanded={isExpanded}
-                    onClick={() => handleToggleCandidate(swapKey)}
+                return (
+                  <li
+                    key={swapKey}
+                    className={`best-swaps-panel__item${isExpanded ? ' best-swaps-panel__item--expanded' : ''}`}
                   >
-                    <span className="best-swaps-panel__cell best-swaps-panel__cell--date">
-                      {aDate}
-                    </span>
-                    <span className="best-swaps-panel__cell best-swaps-panel__cell--resident">
-                      {bResidentName}
-                    </span>
-                    <span className="best-swaps-panel__cell best-swaps-panel__cell--score">
-                      {scoreLabel}
-                    </span>
-                  </button>
+                    <button
+                      type="button"
+                      className="best-swaps-panel__row"
+                      aria-expanded={isExpanded}
+                      onClick={() => handleToggleCandidate(swapKey)}
+                    >
+                      <span className="best-swaps-panel__cell best-swaps-panel__cell--date">
+                        {aDate}
+                      </span>
+                      <span className="best-swaps-panel__cell best-swaps-panel__cell--resident">
+                        {bResidentName}
+                      </span>
+                      <span className="best-swaps-panel__cell best-swaps-panel__cell--score">
+                        {scoreLabel}
+                      </span>
+                    </button>
 
-                  {isExpanded && (
-                    <div className="best-swaps-panel__details">
-                      <div className="best-swaps-panel__shift-grid">
-                        <article
-                          className="best-swaps-panel__shift"
-                          aria-label={`Shift ${candidate.a.id} for ${aResidentName}`}
-                        >
-                          <h4>{aResidentName}</h4>
-                          <p className="best-swaps-panel__shift-type">{aShiftLabel}</p>
-                          <p className="best-swaps-panel__shift-date">{aDate}</p>
-                          <dl
-                            className="best-swaps-panel__shift-rotation"
-                            aria-label="Rotation before and after swap"
+                    {isExpanded && (
+                      <div className="best-swaps-panel__details">
+                        <div className="best-swaps-panel__shift-grid">
+                          <article
+                            className="best-swaps-panel__shift"
+                            aria-label={`Shift ${candidate.a.id} for ${aResidentName}`}
                           >
-                            <div>
-                              <dt>Before</dt>
-                              <dd>{formatRotationValue(originalRotations.before)}</dd>
-                            </div>
-                            <div>
-                              <dt>After</dt>
-                              <dd>{formatRotationValue(originalRotations.after)}</dd>
-                            </div>
-                          </dl>
-                        </article>
-                        <span className="best-swaps-panel__swap-icon" aria-hidden="true">
-                          ↔
-                        </span>
-                        <article
-                          className="best-swaps-panel__shift"
-                          aria-label={`Shift ${candidate.b.id} for ${bResidentName}`}
-                        >
-                          <h4>{bResidentName}</h4>
-                          <p className="best-swaps-panel__shift-type">{bShiftLabel}</p>
-                          <p className="best-swaps-panel__shift-date">{bDate}</p>
-                          <dl
-                            className="best-swaps-panel__shift-rotation"
-                            aria-label="Rotation before and after swap"
+                            <h4>{aResidentName}</h4>
+                            <p className="best-swaps-panel__shift-type">{aShiftLabel}</p>
+                            <p className="best-swaps-panel__shift-date">{aDate}</p>
+                            <dl
+                              className="best-swaps-panel__shift-rotation"
+                              aria-label="Rotation before and after swap"
+                            >
+                              <div>
+                                <dt>Before</dt>
+                                <dd>{formatRotationValue(originalRotations.before)}</dd>
+                              </div>
+                              <div>
+                                <dt>After</dt>
+                                <dd>{formatRotationValue(originalRotations.after)}</dd>
+                              </div>
+                            </dl>
+                          </article>
+                          <span className="best-swaps-panel__swap-icon" aria-hidden="true">
+                            ↔
+                          </span>
+                          <article
+                            className="best-swaps-panel__shift"
+                            aria-label={`Shift ${candidate.b.id} for ${bResidentName}`}
                           >
-                            <div>
-                              <dt>Before</dt>
-                              <dd>{formatRotationValue(counterpartRotations.before)}</dd>
-                            </div>
-                            <div>
-                              <dt>After</dt>
-                              <dd>{formatRotationValue(counterpartRotations.after)}</dd>
-                            </div>
-                          </dl>
-                        </article>
+                            <h4>{bResidentName}</h4>
+                            <p className="best-swaps-panel__shift-type">{bShiftLabel}</p>
+                            <p className="best-swaps-panel__shift-date">{bDate}</p>
+                            <dl
+                              className="best-swaps-panel__shift-rotation"
+                              aria-label="Rotation before and after swap"
+                            >
+                              <div>
+                                <dt>Before</dt>
+                                <dd>{formatRotationValue(counterpartRotations.before)}</dd>
+                              </div>
+                              <div>
+                                <dt>After</dt>
+                                <dd>{formatRotationValue(counterpartRotations.after)}</dd>
+                              </div>
+                            </dl>
+                          </article>
+                        </div>
+
+                        <PressureBreakdown
+                          className="best-swaps-panel__breakdown"
+                          pressure={candidate.pressure}
+                          originalLabel={aResidentName}
+                          counterpartLabel={bResidentName}
+                          valueFormatter={pressureValueFormatter}
+                          deltaFormatter={pressureDeltaFormatter}
+                        />
+
+                        {candidate.reasons && candidate.reasons.length > 0 && (
+                          <ul className="best-swaps-panel__reasons" aria-label="Scoring highlights">
+                            {candidate.reasons.map((reason) => (
+                              <li key={`${swapKey}-reason-${reason}`}>{reason}</li>
+                            ))}
+                          </ul>
+                        )}
+
+                        {candidate.advisories && candidate.advisories.length > 0 && (
+                          <ul className="best-swaps-panel__flags" aria-label="Swap considerations">
+                            {candidate.advisories.map((advisory, index) => (
+                              <li key={`${swapKey}-advisory-${index}`}>{advisory.message}</li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
-
-                      <PressureBreakdown
-                        className="best-swaps-panel__breakdown"
-                        pressure={candidate.pressure}
-                        originalLabel={aResidentName}
-                        counterpartLabel={bResidentName}
-                        valueFormatter={pressureValueFormatter}
-                        deltaFormatter={pressureDeltaFormatter}
-                      />
-
-                      {candidate.reasons && candidate.reasons.length > 0 && (
-                        <ul className="best-swaps-panel__reasons" aria-label="Scoring highlights">
-                          {candidate.reasons.map((reason) => (
-                            <li key={`${swapKey}-reason-${reason}`}>{reason}</li>
-                          ))}
-                        </ul>
-                      )}
-
-                      {candidate.advisories && candidate.advisories.length > 0 && (
-                        <ul className="best-swaps-panel__flags" aria-label="Swap considerations">
-                          {candidate.advisories.map((advisory, index) => (
-                            <li key={`${swapKey}-advisory-${index}`}>{advisory.message}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-                </li>
-              );
+                    )}
+                  </li>
+                );
               })}
             </ol>
           </>

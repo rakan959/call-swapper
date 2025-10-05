@@ -504,7 +504,7 @@ export function SidePanel({
         </dl>
       </div>
 
-  <SwapFinderSection dataset={dataset} shift={shift} swapSettings={swapSettings} />
+      <SwapFinderSection dataset={dataset} shift={shift} swapSettings={swapSettings} />
     </aside>
   );
 }

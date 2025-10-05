@@ -49,7 +49,6 @@ body {
     );
 }
 
-
 .app__header {
   padding: 1.75rem clamp(1rem, 4vw, 2.75rem);
   background: linear-gradient(
