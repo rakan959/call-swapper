@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from '@utils/dayjs';
 import { Dataset, Resident, Shift, ShiftType, SwapCandidate } from '@domain/types';
+import { SwapSettings } from '@domain/swapSettings';
 import { findSwapsForShift } from '@engine/swapEngine';
 import { findRotationForDate } from '@utils/rotations';
 import { formatScore } from '@utils/score';
@@ -10,6 +11,7 @@ import {
   SWAP_SORT_LABELS,
   SwapSortKey,
 } from '@domain/swapSort';
+import { filterCandidatesBySettings } from '@utils/swapFilters';
 import PressureBreakdown from './PressureBreakdown';
 
 export type ShiftPalette = {
@@ -26,6 +28,7 @@ export type SidePanelProps = Readonly<{
   palette: ShiftPalette;
   dataset: Dataset;
   onClose: () => void;
+  swapSettings: SwapSettings;
 }>;
 
 type SwapLoadState = 'idle' | 'loading' | 'ready' | 'error';
@@ -41,6 +44,7 @@ const TYPE_LABELS: Record<ShiftType, string> = {
 type SwapFinderSectionProps = Readonly<{
   dataset: Dataset;
   shift: Shift;
+  swapSettings: SwapSettings;
 }>;
 
 const EMPTY_ROTATION_LABEL = '—';
@@ -78,7 +82,7 @@ function formatRotationValue(value: string | null): string {
   return value ?? EMPTY_ROTATION_LABEL;
 }
 
-function SwapFinderSection({ dataset, shift }: SwapFinderSectionProps): JSX.Element {
+function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionProps): JSX.Element {
   const [loadState, setLoadState] = useState<SwapLoadState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<SwapCandidate[]>([]);
@@ -117,9 +121,16 @@ function SwapFinderSection({ dataset, shift }: SwapFinderSectionProps): JSX.Elem
     setExpandedCandidateId(null);
   }, [dataset, shift.id]);
 
+  const filteredCandidates = useMemo(() => {
+    return filterCandidatesBySettings(candidates, {
+      hideNegativeResident: swapSettings.hideNegativeResident,
+      hideNegativeTotal: swapSettings.hideNegativeTotal,
+    });
+  }, [candidates, swapSettings.hideNegativeResident, swapSettings.hideNegativeTotal]);
+
   const visibleCandidates = useMemo(() => {
     const today = dayjs().startOf('day');
-    const upcoming = candidates.filter((candidate) => {
+    const upcoming = filteredCandidates.filter((candidate) => {
       const targetStart = dayjs(candidate.a.startISO);
       const counterpartStart = dayjs(candidate.b.startISO);
       if (targetStart.isBefore(today, 'day')) {
@@ -139,7 +150,7 @@ function SwapFinderSection({ dataset, shift }: SwapFinderSectionProps): JSX.Elem
       resolveDate,
     });
     return [...upcoming].sort(comparator);
-  }, [candidates, sortDirection, sortKey]);
+  }, [filteredCandidates, sortDirection, sortKey]);
 
   const handleFindSwaps = async () => {
     const token = requestTokenRef.current + 1;
@@ -414,6 +425,7 @@ export function SidePanel({
   palette,
   dataset,
   onClose,
+  swapSettings,
 }: SidePanelProps): JSX.Element {
   useEffect(() => {
     if (typeof document === 'undefined' || typeof window === 'undefined') {
@@ -492,7 +504,7 @@ export function SidePanel({
         </dl>
       </div>
 
-      <SwapFinderSection dataset={dataset} shift={shift} />
+  <SwapFinderSection dataset={dataset} shift={shift} swapSettings={swapSettings} />
     </aside>
   );
 }

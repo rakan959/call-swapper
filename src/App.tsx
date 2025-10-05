@@ -38,12 +38,8 @@ import {
   SortDirection,
   SwapSortKey,
 } from '@domain/swapSort';
-import {
-  getAverageScore,
-  getCounterpartScore,
-  getMyScore,
-  getTotalScore,
-} from '@utils/swapMetrics';
+import { getAverageScore, getCounterpartScore, getMyScore, getTotalScore } from '@utils/swapMetrics';
+import { filterCandidatesBySettings } from '@utils/swapFilters';
 import { loadSwapSettings, saveSwapSettings, SwapSettings } from '@domain/swapSettings';
 import { debugError, debugLog } from '@utils/debug';
 import { resolveRuntimeEnv } from './config/runtimeEnv';
@@ -121,8 +117,8 @@ function AllSwapsList({
           residentNameById.get(candidate.b.residentId) ?? candidate.b.residentId;
         const originalShiftDate = dateFormatter.format(new Date(candidate.a.startISO));
         const counterpartShiftDate = dateFormatter.format(new Date(candidate.b.startISO));
-        const scoreLabel = `${formatScore(getMyScore(candidate))}|${formatScore(getCounterpartScore(candidate))}|${formatScore(getTotalScore(candidate))}`;
-        const averageLabel = formatScore(getAverageScore(candidate));
+  const scoreLabel = `${formatScore(getMyScore(candidate))}|${formatScore(getCounterpartScore(candidate))}|${formatScore(getTotalScore(candidate))}`;
+  const averageLabel = formatScore(getAverageScore(candidate));
         const originalResident = residentsById.get(candidate.a.residentId);
         const counterpartResident = residentsById.get(candidate.b.residentId);
         const originalRotations = buildRotationPair(
@@ -154,10 +150,8 @@ function AllSwapsList({
                 {counterpartResidentName}
               </span>
               <span className="all-swaps-panel__cell all-swaps-panel__cell--score">
-                {scoreLabel}
-              </span>
-              <span className="all-swaps-panel__cell all-swaps-panel__cell--average">
-                Avg {averageLabel}
+                <span className="all-swaps-panel__score-label">{scoreLabel}</span>
+                <span className="all-swaps-panel__score-meta">Avg {averageLabel}</span>
               </span>
             </button>
 
@@ -259,7 +253,6 @@ type AllSwapsPanelProps = Readonly<{
   valueFormatter: Intl.NumberFormat;
   deltaFormatter: Intl.NumberFormat;
   settings: SwapSettings;
-  onSettingsChange: (nextSettings: SwapSettings) => void;
 }>;
 
 function resolveCandidateDate(candidate: SwapCandidate): number {
@@ -288,13 +281,16 @@ function AllSwapsPanel({
   valueFormatter,
   deltaFormatter,
   settings,
-  onSettingsChange,
 }: AllSwapsPanelProps): JSX.Element {
   const [sortKey, setSortKey] = useState<SwapSortKey>(settings.defaultSortKey);
   const [sortDirection, setSortDirection] = useState<SortDirection>(settings.defaultSortDirection);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const settingsContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const candidatePool = useMemo(() => {
+    return candidates.filter(
+      (candidate) => candidate.a.type !== 'BACKUP' && candidate.b.type !== 'BACKUP',
+    );
+  }, [candidates]);
 
   useEffect(() => {
     setSortKey(settings.defaultSortKey);
@@ -302,57 +298,14 @@ function AllSwapsPanel({
     setExpandedId(null);
   }, [settings.defaultSortDirection, settings.defaultSortKey]);
 
-  useEffect(() => {
-    if (!isSettingsOpen || typeof document === 'undefined') {
-      return;
-    }
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!settingsContainerRef.current) {
-        return;
-      }
-      if (event.target instanceof Node && settingsContainerRef.current.contains(event.target)) {
-        return;
-      }
-      setIsSettingsOpen(false);
-    };
-    const handleKeydown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsSettingsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeydown);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeydown);
-    };
-  }, [isSettingsOpen]);
-
-  const applySettingsUpdate = (update: Partial<SwapSettings>) => {
-    const nextSettings: SwapSettings = {
-      defaultSortKey: update.defaultSortKey ?? settings.defaultSortKey,
-      defaultSortDirection: update.defaultSortDirection ?? settings.defaultSortDirection,
-      hideNegativeResident: update.hideNegativeResident ?? settings.hideNegativeResident,
-      hideNegativeTotal: update.hideNegativeTotal ?? settings.hideNegativeTotal,
-    };
-    onSettingsChange(nextSettings);
-  };
-
   const filteredCandidates = useMemo(() => {
-    return candidates.filter((candidate) => {
-      if (settings.hideNegativeResident) {
-        if (getMyScore(candidate) < 0 || getCounterpartScore(candidate) < 0) {
-          return false;
-        }
-      }
-      if (settings.hideNegativeTotal && getTotalScore(candidate) < 0) {
-        return false;
-      }
-      return true;
+    return filterCandidatesBySettings(candidatePool, {
+      hideNegativeResident: settings.hideNegativeResident,
+      hideNegativeTotal: settings.hideNegativeTotal,
     });
-  }, [candidates, settings.hideNegativeResident, settings.hideNegativeTotal]);
+  }, [candidatePool, settings.hideNegativeResident, settings.hideNegativeTotal]);
 
-  const hiddenCount = candidates.length - filteredCandidates.length;
+  const hiddenCount = candidatePool.length - filteredCandidates.length;
 
   const sortedCandidates = useMemo(() => {
     const comparator = createSwapComparator(sortKey, {
@@ -377,28 +330,6 @@ function AllSwapsPanel({
     setExpandedId((current) => (current === candidateId ? null : candidateId));
   };
 
-  const handleDefaultSortKeySettingChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const key = event.target.value as SwapSortKey;
-    applySettingsUpdate({
-      defaultSortKey: key,
-      defaultSortDirection: defaultSortDirection(key),
-    });
-  };
-
-  const handleDefaultSortDirectionSetting = () => {
-    applySettingsUpdate({
-      defaultSortDirection: settings.defaultSortDirection === 'asc' ? 'desc' : 'asc',
-    });
-  };
-
-  const handleToggleHideNegativeResident = () => {
-    applySettingsUpdate({ hideNegativeResident: !settings.hideNegativeResident });
-  };
-
-  const handleToggleHideNegativeTotal = () => {
-    applySettingsUpdate({ hideNegativeTotal: !settings.hideNegativeTotal });
-  };
-
   const sortDirectionText =
     sortKey === 'date'
       ? sortDirection === 'desc'
@@ -408,22 +339,13 @@ function AllSwapsPanel({
         ? 'High → Low'
         : 'Low → High';
 
-  const defaultSortDirectionText =
-    settings.defaultSortKey === 'date'
-      ? settings.defaultSortDirection === 'desc'
-        ? 'Latest → Soonest'
-        : 'Soonest → Latest'
-      : settings.defaultSortDirection === 'desc'
-        ? 'High → Low'
-        : 'Low → High';
-
   let body: JSX.Element;
   if (status === 'idle') {
     body = (
       <p className="all-swaps-panel__hint">
         {selectedResidentName
-          ? `Run “Find best swaps” for ${selectedResidentName} to populate this list.`
-          : 'Choose a resident and run “Find best swaps” to populate this list.'}
+          ? `Run the search to populate every feasible swap for ${selectedResidentName}.`
+          : 'Choose a resident and run the swap search to populate this list.'}
       </p>
     );
   } else if (status === 'loading') {
@@ -494,98 +416,7 @@ function AllSwapsPanel({
   }
 
   return (
-    <section className="all-swaps-panel" aria-label="Find all swaps">
-      <header className="all-swaps-panel__header">
-        <div>
-          <h2 className="all-swaps-panel__title">Find all swaps</h2>
-          <p className="all-swaps-panel__subtitle">
-            {selectedResidentName
-              ? `Review every feasible swap for ${selectedResidentName}.`
-              : 'Select a resident and run the swap search to review every feasible swap.'}
-          </p>
-        </div>
-        <div className="all-swaps-panel__settings" ref={settingsContainerRef}>
-          <button
-            type="button"
-            className="all-swaps-panel__settings-toggle"
-            aria-haspopup="dialog"
-            aria-expanded={isSettingsOpen}
-            aria-controls="all-swaps-settings-dialog"
-            onClick={() => setIsSettingsOpen((previous) => !previous)}
-          >
-            Settings
-          </button>
-          {isSettingsOpen && (
-            <div
-              id="all-swaps-settings-dialog"
-              role="dialog"
-              aria-modal="false"
-              className="all-swaps-panel__settings-popover"
-            >
-              <h3 className="all-swaps-panel__settings-title">Swap defaults</h3>
-              <div className="all-swaps-panel__settings-row">
-                <label htmlFor="all-swaps-default-sort">Default sort</label>
-                <select
-                  id="all-swaps-default-sort"
-                  value={settings.defaultSortKey}
-                  onChange={handleDefaultSortKeySettingChange}
-                >
-                  {Object.entries(SWAP_SORT_LABELS).map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="all-swaps-panel__settings-row all-swaps-panel__settings-row--compact">
-                <span
-                  id="all-swaps-default-order-label"
-                  className="all-swaps-panel__settings-label"
-                >
-                  Default order
-                </span>
-                <button
-                  type="button"
-                  className="all-swaps-panel__settings-order"
-                  aria-labelledby="all-swaps-default-order-label"
-                  onClick={handleDefaultSortDirectionSetting}
-                >
-                  {defaultSortDirectionText}
-                </button>
-              </div>
-              <fieldset className="all-swaps-panel__settings-fieldset">
-                <legend className="all-swaps-panel__settings-legend">Filters</legend>
-                <label
-                  htmlFor="all-swaps-setting-hide-resident"
-                  className="all-swaps-panel__settings-checkbox"
-                >
-                  <input
-                    id="all-swaps-setting-hide-resident"
-                    type="checkbox"
-                    checked={settings.hideNegativeResident}
-                    onChange={handleToggleHideNegativeResident}
-                  />
-                  Hide swaps when any resident score is negative
-                </label>
-                <label
-                  htmlFor="all-swaps-setting-hide-total"
-                  className="all-swaps-panel__settings-checkbox"
-                >
-                  <input
-                    id="all-swaps-setting-hide-total"
-                    type="checkbox"
-                    checked={settings.hideNegativeTotal}
-                    onChange={handleToggleHideNegativeTotal}
-                  />
-                  Hide swaps when the combined score is negative
-                </label>
-              </fieldset>
-            </div>
-          )}
-        </div>
-      </header>
-      {body}
-    </section>
+    <div className="all-swaps-panel">{body}</div>
   );
 }
 
@@ -609,10 +440,84 @@ export default function App(): JSX.Element {
   });
   const [expandedSwapId, setExpandedSwapId] = useState<string | null>(null);
   const [swapSettings, setSwapSettings] = useState<SwapSettings>(() => loadSwapSettings());
+  const [isSwapSettingsOpen, setIsSwapSettingsOpen] = useState(false);
 
   const calendarContainerRef = useRef<HTMLDivElement | null>(null);
   const calendarRef = useRef<Calendar | null>(null);
   const bestSwapsRequestTokenRef = useRef(0);
+  const swapSettingsContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const updateSwapSettings = useCallback(
+    (update: Partial<SwapSettings>) => {
+      setSwapSettings((current) => ({
+        defaultSortKey: update.defaultSortKey ?? current.defaultSortKey,
+        defaultSortDirection: update.defaultSortDirection ?? current.defaultSortDirection,
+        hideNegativeResident: update.hideNegativeResident ?? current.hideNegativeResident,
+        hideNegativeTotal: update.hideNegativeTotal ?? current.hideNegativeTotal,
+      }));
+    },
+    [setSwapSettings],
+  );
+
+  useEffect(() => {
+    if (!isSwapSettingsOpen || typeof document === 'undefined') {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!swapSettingsContainerRef.current) {
+        return;
+      }
+      if (
+        event.target instanceof Node &&
+        swapSettingsContainerRef.current.contains(event.target)
+      ) {
+        return;
+      }
+      setIsSwapSettingsOpen(false);
+    };
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsSwapSettingsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeydown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeydown);
+    };
+  }, [isSwapSettingsOpen]);
+
+  const handleDefaultSortKeySettingChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const key = event.target.value as SwapSortKey;
+    updateSwapSettings({
+      defaultSortKey: key,
+      defaultSortDirection: defaultSortDirection(key),
+    });
+  };
+
+  const handleDefaultSortDirectionSetting = () => {
+    updateSwapSettings({
+      defaultSortDirection: swapSettings.defaultSortDirection === 'asc' ? 'desc' : 'asc',
+    });
+  };
+
+  const handleToggleHideNegativeResident = () => {
+    updateSwapSettings({ hideNegativeResident: !swapSettings.hideNegativeResident });
+  };
+
+  const handleToggleHideNegativeTotal = () => {
+    updateSwapSettings({ hideNegativeTotal: !swapSettings.hideNegativeTotal });
+  };
+
+  const defaultSortDirectionText = useMemo(() => {
+    if (swapSettings.defaultSortKey === 'date') {
+      return swapSettings.defaultSortDirection === 'desc'
+        ? 'Latest → Soonest'
+        : 'Soonest → Latest';
+    }
+    return swapSettings.defaultSortDirection === 'desc' ? 'High → Low' : 'Low → High';
+  }, [swapSettings.defaultSortDirection, swapSettings.defaultSortKey]);
 
   useEffect(() => {
     const container = calendarContainerRef.current;
@@ -852,9 +757,22 @@ export default function App(): JSX.Element {
     }
   }, [dataset, selectedResidentId]);
 
+  const filteredBestSwaps = useMemo(() => {
+    return filterCandidatesBySettings(bestSwapsState.candidates, {
+      hideNegativeResident: swapSettings.hideNegativeResident,
+      hideNegativeTotal: swapSettings.hideNegativeTotal,
+    });
+  }, [
+    bestSwapsState.candidates,
+    swapSettings.hideNegativeResident,
+    swapSettings.hideNegativeTotal,
+  ]);
+
+  const hiddenBestSwapsCount = bestSwapsState.candidates.length - filteredBestSwaps.length;
+
   const topBestSwaps = useMemo(() => {
-    return bestSwapsState.candidates.slice(0, 10);
-  }, [bestSwapsState.candidates]);
+    return filteredBestSwaps.slice(0, 10);
+  }, [filteredBestSwaps]);
 
   const handleToggleCandidate = useCallback((candidateKey: string) => {
     setExpandedSwapId((current) => (current === candidateKey ? null : candidateKey));
@@ -1177,12 +1095,6 @@ export default function App(): JSX.Element {
     const residentDisplayName = filteredResident?.name ?? 'the selected resident';
     bestSwapsContent = (
       <>
-        {bestSwapsState.status === 'idle' && (
-          <p className="best-swaps-panel__hint">
-            Run the search to see the highest scoring swap pairs for {residentDisplayName}.
-          </p>
-        )}
-
         {bestSwapsState.status === 'loading' && (
           <p className="best-swaps-panel__loading">
             Evaluating swap combinations for {residentDisplayName}…
@@ -1195,15 +1107,27 @@ export default function App(): JSX.Element {
           </p>
         )}
 
+        {bestSwapsState.status === 'ready' && hiddenBestSwapsCount > 0 && topBestSwaps.length > 0 && (
+          <p className="best-swaps-panel__filters">
+            {hiddenBestSwapsCount === 1
+              ? '1 swap suggestion is hidden by the current filters.'
+              : `${hiddenBestSwapsCount} swap suggestions are hidden by the current filters.`}
+          </p>
+        )}
+
         {bestSwapsState.status === 'ready' && topBestSwaps.length === 0 && (
           <p className="best-swaps-panel__empty">
-            No feasible swaps were found for {residentDisplayName}.
+            {hiddenBestSwapsCount > 0
+              ? 'No swap suggestions match the current filters.'
+              : `No feasible swaps were found for ${residentDisplayName}.`}
           </p>
         )}
 
         {bestSwapsState.status === 'ready' && topBestSwaps.length > 0 && (
-          <ol className="best-swaps-panel__list" aria-label="Top swap suggestions">
-            {topBestSwaps.map((candidate) => {
+          <>
+            <h3 className="best-swaps-panel__section-title">Top 10 swap suggestions</h3>
+            <ol className="best-swaps-panel__list" aria-label="Top 10 swap suggestions">
+              {topBestSwaps.map((candidate) => {
               const aResidentName =
                 residentNameById.get(candidate.a.residentId) ?? candidate.a.residentId;
               const bResidentName =
@@ -1330,8 +1254,9 @@ export default function App(): JSX.Element {
                   )}
                 </li>
               );
-            })}
-          </ol>
+              })}
+            </ol>
+          </>
         )}
       </>
     );
@@ -1340,32 +1265,106 @@ export default function App(): JSX.Element {
   return (
     <div className="app" role="application" aria-labelledby="app-title">
       <header className="app__header">
-        <div>
-          <h1 id="app-title">Call Swap Finder</h1>
-          <p className="app__tagline">
-            View the call schedule, switch between month and week views, and understand shift types
-            at a glance.
-          </p>
+        <div className="app__header-inner">
+          <div className="app__header-primary">
+            <h1 id="app-title">Call Swap Finder</h1>
+            <p className="app__tagline">
+              View the call schedule, switch between month and week views, and understand shift
+              types at a glance.
+            </p>
+          </div>
+          <div className="app__header-controls">
+            <form className="resident-filter" aria-label="Resident filter">
+              <label htmlFor="resident-select">Filter by resident</label>
+              <select
+                id="resident-select"
+                value={selectedResidentId ?? ''}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSelectedResidentId(value === '' ? null : value);
+                }}
+                disabled={!dataset || residentOptions.length === 0}
+              >
+                <option value="">All residents</option>
+                {residentOptions.map((resident) => (
+                  <option key={resident.id} value={resident.id}>
+                    {resident.name}
+                  </option>
+                ))}
+              </select>
+            </form>
+            <div className="swap-settings" ref={swapSettingsContainerRef}>
+              <button
+                type="button"
+                className="swap-settings__toggle"
+                aria-haspopup="dialog"
+                aria-expanded={isSwapSettingsOpen}
+                aria-controls="swap-settings-dialog"
+                onClick={() => setIsSwapSettingsOpen((previous) => !previous)}
+              >
+                Settings
+              </button>
+              {isSwapSettingsOpen && (
+                <dialog
+                  id="swap-settings-dialog"
+                  className="swap-settings__popover"
+                  aria-modal="false"
+                  open
+                >
+                  <h3 className="swap-settings__title">Swap defaults</h3>
+                  <div className="swap-settings__row">
+                    <label htmlFor="swap-default-sort">Default sort</label>
+                    <select
+                      id="swap-default-sort"
+                      value={swapSettings.defaultSortKey}
+                      onChange={handleDefaultSortKeySettingChange}
+                    >
+                      {Object.entries(SWAP_SORT_LABELS).map(([key, label]) => (
+                        <option key={key} value={key}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="swap-settings__row swap-settings__row--compact">
+                    <span id="swap-default-order-label" className="swap-settings__label">
+                      Default order
+                    </span>
+                    <button
+                      type="button"
+                      className="swap-settings__order"
+                      aria-labelledby="swap-default-order-label"
+                      onClick={handleDefaultSortDirectionSetting}
+                    >
+                      {defaultSortDirectionText}
+                    </button>
+                  </div>
+                  <fieldset className="swap-settings__fieldset">
+                    <legend className="swap-settings__legend">Filters</legend>
+                    <label htmlFor="swap-setting-hide-resident" className="swap-settings__checkbox">
+                      <input
+                        id="swap-setting-hide-resident"
+                        type="checkbox"
+                        checked={swapSettings.hideNegativeResident}
+                        onChange={handleToggleHideNegativeResident}
+                      />
+                      <span>Hide swaps when any resident score is negative</span>
+                    </label>
+                    <label htmlFor="swap-setting-hide-total" className="swap-settings__checkbox">
+                      <input
+                        id="swap-setting-hide-total"
+                        type="checkbox"
+                        checked={swapSettings.hideNegativeTotal}
+                        onChange={handleToggleHideNegativeTotal}
+                      />
+                      <span>Hide swaps when the combined score is negative</span>
+                    </label>
+                  </fieldset>
+                </dialog>
+              )}
+            </div>
+          </div>
         </div>
-        <form className="resident-filter" aria-label="Resident filter">
-          <label htmlFor="resident-select">Filter by resident</label>
-          <select
-            id="resident-select"
-            value={selectedResidentId ?? ''}
-            onChange={(event) => {
-              const value = event.target.value;
-              setSelectedResidentId(value === '' ? null : value);
-            }}
-            disabled={!dataset || residentOptions.length === 0}
-          >
-            <option value="">All residents</option>
-            {residentOptions.map((resident) => (
-              <option key={resident.id} value={resident.id}>
-                {resident.name}
-              </option>
-            ))}
-          </select>
-        </form>
       </header>
 
       <main className="app__main">
@@ -1391,11 +1390,12 @@ export default function App(): JSX.Element {
               resident={selectedResident}
               palette={selectedPalette}
               dataset={dataset}
+              swapSettings={swapSettings}
               onClose={() => setSelectedShiftId(null)}
             />
           </div>
         )}
-        <section className="best-swaps-panel" aria-label="Top swap suggestions">
+        <section className="best-swaps-panel" aria-label="Find best swaps">
           <header className="best-swaps-panel__header">
             <div>
               <h2 className="best-swaps-panel__title">Find best swaps</h2>
@@ -1405,32 +1405,33 @@ export default function App(): JSX.Element {
                   : 'Choose a resident to enable tailored swap recommendations.'}
               </p>
             </div>
-            <button
-              type="button"
-              className="best-swaps-panel__action"
-              onClick={handleFindBestSwaps}
-              disabled={isBestSwapsActionDisabled}
-            >
-              {bestSwapsState.status === 'loading' ? 'Finding…' : 'Find best swaps'}
-            </button>
+            <div className="best-swaps-panel__actions">
+              <button
+                type="button"
+                className="best-swaps-panel__action"
+                onClick={handleFindBestSwaps}
+                disabled={isBestSwapsActionDisabled}
+              >
+                {bestSwapsState.status === 'loading' ? 'Finding…' : 'Find best swaps'}
+              </button>
+            </div>
           </header>
 
           {bestSwapsContent}
-        </section>
 
-        <AllSwapsPanel
-          status={bestSwapsState.status}
-          error={bestSwapsState.error}
-          candidates={bestSwapsState.candidates}
-          residentsById={residentsById}
-          residentNameById={residentNameById}
-          selectedResidentName={filteredResident?.name ?? null}
-          dateFormatter={bestSwapDateFormatter}
-          valueFormatter={pressureValueFormatter}
-          deltaFormatter={pressureDeltaFormatter}
-          settings={swapSettings}
-          onSettingsChange={setSwapSettings}
-        />
+          <AllSwapsPanel
+            status={bestSwapsState.status}
+            error={bestSwapsState.error}
+            candidates={bestSwapsState.candidates}
+            residentsById={residentsById}
+            residentNameById={residentNameById}
+            selectedResidentName={filteredResident?.name ?? null}
+            dateFormatter={bestSwapDateFormatter}
+            valueFormatter={pressureValueFormatter}
+            deltaFormatter={pressureDeltaFormatter}
+            settings={swapSettings}
+          />
+        </section>
 
         <section className="status-panel" aria-live="polite">
           {loadState === 'loading' && <p>Loading schedule…</p>}

@@ -149,6 +149,15 @@ const CANDIDATE_IP_CONSULT: Shift = {
   location: 'Main',
 };
 
+const CANDIDATE_BACKUP: Shift = {
+  id: 'S5',
+  residentId: 'R5',
+  startISO: '2026-10-06T08:00:00Z',
+  endISO: '2026-10-06T20:00:00Z',
+  type: 'BACKUP',
+  location: 'Main',
+};
+
 const DATASET: Dataset = {
   residents: [
     {
@@ -179,8 +188,21 @@ const DATASET: Dataset = {
       rotations: [],
       academicYears: [],
     },
+    {
+      id: 'R5',
+      name: 'Erin Patel',
+      eligibleShiftTypes: ['BACKUP', 'MOSES', 'WEILER'],
+      rotations: [],
+      academicYears: [],
+    },
   ],
-  shifts: [TARGET_SHIFT, CANDIDATE_R2, CANDIDATE_IP_CONSULT, CANDIDATE_NIGHT_FLOAT],
+  shifts: [
+    TARGET_SHIFT,
+    CANDIDATE_R2,
+    CANDIDATE_IP_CONSULT,
+    CANDIDATE_NIGHT_FLOAT,
+    CANDIDATE_BACKUP,
+  ],
 };
 
 const SCORE_SCALE = 100;
@@ -469,8 +491,8 @@ describe('App side panel selection', () => {
     });
 
     await screen.findByRole('heading', { name: 'Alice Rivers' });
-    const swapSection = await screen.findByRole('region', { name: /swap finder/i });
-    const action = within(swapSection).getByRole('button', { name: /find swaps/i });
+  const swapSection = await screen.findByRole('region', { name: /swap finder/i });
+  const action = within(swapSection).getByRole('button', { name: /find swaps/i });
     fireEvent.click(action);
 
     await waitFor(() => {
@@ -533,8 +555,8 @@ describe('App side panel selection', () => {
     });
 
     await screen.findByRole('heading', { name: 'Alice Rivers' });
-    const swapSection = await screen.findByRole('region', { name: /swap finder/i });
-    const action = within(swapSection).getByRole('button', { name: /find swaps/i });
+  const swapSection = await screen.findByRole('region', { name: /swap finder/i });
+  const action = within(swapSection).getByRole('button', { name: /find swaps/i });
     fireEvent.click(action);
 
     await within(swapSection).findByRole('list', { name: /swap suggestions/i });
@@ -642,7 +664,7 @@ describe('App side panel selection', () => {
       expect(findBestSwapsMock).toHaveBeenCalledTimes(1);
     });
 
-    const list = await screen.findByRole('list', { name: /top swap suggestions/i });
+  const list = await screen.findByRole('list', { name: /top 10 swap suggestions/i });
     const items = within(list)
       .getAllByRole('listitem')
       .filter((item) => item.parentElement === list);
@@ -791,5 +813,180 @@ describe('App side panel selection', () => {
       expect(parsed.hideNegativeResident).toBe(false);
       expect(parsed.hideNegativeTotal).toBe(true);
     });
+  });
+
+  it('filters best swap suggestions when resident scores are negative', async () => {
+    findBestSwapsMock.mockResolvedValue([
+      createSwapCandidate(CANDIDATE_R2, 5, 6),
+      createSwapCandidate(CANDIDATE_IP_CONSULT, -3, 7, 4),
+    ]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
+    });
+
+    const residentSelect = screen.getByLabelText('Filter by resident');
+    fireEvent.change(residentSelect, { target: { value: 'R1' } });
+
+    const bestSwapsButton = await screen.findByRole('button', { name: /find best swaps/i });
+    await waitFor(() => {
+      expect(bestSwapsButton.hasAttribute('disabled')).toBe(false);
+    });
+    fireEvent.click(bestSwapsButton);
+
+    await waitFor(() => {
+      expect(findBestSwapsMock).toHaveBeenCalledTimes(1);
+    });
+
+    const initialMessage = await screen.findByText(
+      /swap suggestion is hidden by the current filters/i,
+    );
+    expect(initialMessage.textContent ?? '').toContain('1 swap suggestion');
+
+    await waitFor(() => {
+  const list = screen.getByRole('list', { name: 'Top 10 swap suggestions' });
+      expect(within(list).getAllByRole('button')).toHaveLength(1);
+    });
+
+    const settingsToggle = screen.getByRole('button', { name: 'Settings' });
+    fireEvent.click(settingsToggle);
+
+    const hideResidentCheckbox = screen.getByLabelText<HTMLInputElement>(
+      'Hide swaps when any resident score is negative',
+    );
+    expect(hideResidentCheckbox.checked).toBe(true);
+
+    fireEvent.click(hideResidentCheckbox);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/swap suggestion is hidden by the current filters/i)).toBeNull();
+    });
+
+    await waitFor(() => {
+  const list = screen.getByRole('list', { name: 'Top 10 swap suggestions' });
+      expect(within(list).getAllByRole('button')).toHaveLength(2);
+    });
+
+    fireEvent.click(hideResidentCheckbox);
+
+    const restoredMessage = await screen.findByText(
+      /swap suggestion is hidden by the current filters/i,
+    );
+    expect(restoredMessage.textContent ?? '').toContain('1 swap suggestion');
+
+    await waitFor(() => {
+  const list = screen.getByRole('list', { name: 'Top 10 swap suggestions' });
+      expect(within(list).getAllByRole('button')).toHaveLength(1);
+    });
+  });
+
+  it('omits backup swaps from the all swaps list', async () => {
+    findBestSwapsMock.mockResolvedValue([
+      createSwapCandidate(CANDIDATE_R2, 6, 6),
+      createSwapCandidate(CANDIDATE_BACKUP, 5, 5, 10),
+    ]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
+    });
+
+    const residentSelect = screen.getByLabelText('Filter by resident');
+    fireEvent.change(residentSelect, { target: { value: 'R1' } });
+
+    const bestSwapsButton = await screen.findByRole('button', { name: /find best swaps/i });
+    await waitFor(() => {
+      expect(bestSwapsButton.hasAttribute('disabled')).toBe(false);
+    });
+    fireEvent.click(bestSwapsButton);
+
+    await waitFor(() => {
+      expect(findBestSwapsMock).toHaveBeenCalledTimes(1);
+    });
+
+  const topList = await screen.findByRole('list', { name: /top 10 swap suggestions/i });
+    await waitFor(() => {
+      const items = within(topList)
+        .getAllByRole('listitem')
+        .filter((item) => item.parentElement === topList);
+      expect(items).toHaveLength(2);
+    });
+
+    const allList = await screen.findByRole('list', { name: 'All swap combinations' });
+    await waitFor(() => {
+      expect(within(allList).getAllByRole('button', { name: /Avg/ })).toHaveLength(1);
+    });
+
+    expect(within(allList).queryByText('Erin Patel')).toBeNull();
+  });
+
+  it('shows an empty state when best swap filters hide all suggestions', async () => {
+    findBestSwapsMock.mockResolvedValue([
+      createSwapCandidate(CANDIDATE_IP_CONSULT, -2, 8, 6),
+      createSwapCandidate(CANDIDATE_NIGHT_FLOAT, 4, 5, -3),
+    ]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
+    });
+
+    const residentSelect = screen.getByLabelText('Filter by resident');
+    fireEvent.change(residentSelect, { target: { value: 'R1' } });
+
+    const bestSwapsButton = await screen.findByRole('button', { name: /find best swaps/i });
+    await waitFor(() => {
+      expect(bestSwapsButton.hasAttribute('disabled')).toBe(false);
+    });
+    fireEvent.click(bestSwapsButton);
+
+    await waitFor(() => {
+      expect(findBestSwapsMock).toHaveBeenCalledTimes(1);
+    });
+
+    const emptyState = await screen.findByText('No swap suggestions match the current filters.');
+    expect(emptyState).toBeTruthy();
+  expect(screen.queryByRole('list', { name: 'Top 10 swap suggestions' })).toBeNull();
+
+    const settingsToggle = screen.getByRole('button', { name: 'Settings' });
+    fireEvent.click(settingsToggle);
+
+    const hideResidentCheckbox = screen.getByLabelText<HTMLInputElement>(
+      'Hide swaps when any resident score is negative',
+    );
+    const hideTotalCheckbox = screen.getByLabelText<HTMLInputElement>(
+      'Hide swaps when the combined score is negative',
+    );
+
+    expect(hideResidentCheckbox.checked).toBe(true);
+    expect(hideTotalCheckbox.checked).toBe(true);
+
+    fireEvent.click(hideResidentCheckbox);
+    fireEvent.click(hideTotalCheckbox);
+
+    await waitFor(() => {
+  const list = screen.getByRole('list', { name: 'Top 10 swap suggestions' });
+      expect(within(list).getAllByRole('button')).toHaveLength(2);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('No swap suggestions match the current filters.')).toBeNull();
+    });
+
+    fireEvent.click(hideResidentCheckbox);
+    fireEvent.click(hideTotalCheckbox);
+
+    await waitFor(() => {
+  expect(screen.queryByRole('list', { name: 'Top 10 swap suggestions' })).toBeNull();
+    });
+
+    const restoredEmptyState = await screen.findByText(
+      'No swap suggestions match the current filters.',
+    );
+    expect(restoredEmptyState).toBeTruthy();
   });
 });
