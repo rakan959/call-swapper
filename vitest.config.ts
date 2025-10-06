@@ -1,5 +1,8 @@
 import { defineConfig, mergeConfig } from 'vitest/config';
 import viteConfig from './vite.config';
+import { registerRollupFallback } from './tools/registerRollupFallback';
+
+registerRollupFallback();
 
 export default mergeConfig(
   viteConfig,

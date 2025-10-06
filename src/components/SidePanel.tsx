@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import type { JSX } from 'react';
 import dayjs from '@utils/dayjs';
 import { Dataset, Resident, Shift, ShiftType, SwapCandidate } from '@domain/types';
 import { SwapSettings } from '@domain/swapSettings';

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
+import type { JSX } from 'react';
 import { debugLog } from '@utils/debug';
 import { SHIFT_TYPES, ShiftType } from '@domain/types';
 import type { ShiftPalette } from './SidePanel';
