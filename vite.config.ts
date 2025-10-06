@@ -2,6 +2,9 @@ import { defineConfig } from 'vite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
+import { registerRollupFallback } from './tools/registerRollupFallback';
+
+registerRollupFallback();
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const ghPagesBase = process.env.GH_PAGES_BASE?.trim();
