@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "node ./tools/ensureRollupFallback.cjs",
     "dev": "vite",
     "build": "vite build",
     "test": "vitest run",
