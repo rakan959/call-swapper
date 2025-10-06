@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import type { JSX } from 'react';
 import dayjs from '@utils/dayjs';
 import { SwapPressureBreakdown, SwapPressureCall, SwapPressureSection } from '@domain/types';
 
