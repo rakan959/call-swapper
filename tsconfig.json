@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
     "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "Bundler",
@@ -11,15 +14,35 @@
     "noImplicitOverride": true,
     "noImplicitReturns": true,
     "skipLibCheck": true,
-    "types": ["vitest/globals", "node", "vite/client"],
+    "types": [
+      "vitest/globals",
+      "node",
+      "vite/client"
+    ],
     "baseUrl": ".",
     "paths": {
-      "@domain": ["src/domain/index.ts"],
-      "@domain/*": ["src/domain/*"],
-      "@engine/*": ["src/engine/*"],
-      "@utils": ["src/utils/index.ts"],
-      "@utils/*": ["src/utils/*"]
+      "@domain": [
+        "src/domain/index.ts"
+      ],
+      "@domain/*": [
+        "src/domain/*"
+      ],
+      "@engine/*": [
+        "src/engine/*"
+      ],
+      "@utils": [
+        "src/utils/index.ts"
+      ],
+      "@utils/*": [
+        "src/utils/*"
+      ]
     }
   },
-  "include": ["src", "tests", "tools", "vite.config.ts"]
+  "include": [
+    "src",
+    "tests",
+    "tools",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
 }
