@@ -234,7 +234,9 @@ export async function findBestSwaps(
       todayOverride: options?.today,
     }),
     async () => {
-      const primaryShifts = dataset.shifts.filter((shift) => shift.residentId === residentId);
+      const primaryShifts = dataset.shifts.filter(
+        (shift) => shift.residentId === residentId && shift.type !== 'BACKUP',
+      );
       if (primaryShifts.length === 0) {
         debugLog('findBestSwaps:no-primary-shifts', { residentId });
         return [];
@@ -249,6 +251,7 @@ export async function findBestSwaps(
         }
         for (const b of dataset.shifts) {
           if (b.residentId === residentId) continue;
+          if (b.type === 'BACKUP') continue;
           if (a.type !== b.type) continue;
           if (a.id === b.id) continue;
           if (dayjs(b.startISO).isBefore(today, 'day')) continue;
