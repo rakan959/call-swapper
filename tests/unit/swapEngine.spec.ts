@@ -4,6 +4,7 @@ import { terminatePool } from '../../src/engine/workerPool';
 import type { Dataset, Shift } from '../../src/domain/types';
 import { parseCsvToDataset } from '../../src/utils/csv';
 import * as workerPool from '../../src/engine/workerPool';
+import type { ShiftPair } from '../../src/engine/workerProtocol';
 import * as rules from '../../src/domain/rules';
 import * as debug from '../../src/utils/debug';
 
@@ -358,6 +359,89 @@ describe('swapEngine', () => {
     });
 
     expect(swaps).toEqual([]);
+  });
+
+  it('ignores backup shifts when finding best swaps', async () => {
+    const dataset: Dataset = {
+      residents: [
+        {
+          id: 'R1',
+          name: 'Resident One',
+          eligibleShiftTypes: ['MOSES', 'BACKUP'],
+          rotations: [],
+          academicYears: [],
+        },
+        {
+          id: 'R2',
+          name: 'Resident Two',
+          eligibleShiftTypes: ['MOSES', 'BACKUP'],
+          rotations: [],
+          academicYears: [],
+        },
+        {
+          id: 'R3',
+          name: 'Resident Three',
+          eligibleShiftTypes: ['BACKUP'],
+          rotations: [],
+          academicYears: [],
+        },
+      ],
+      shifts: [
+        {
+          id: 'PRIMARY_BACKUP',
+          residentId: 'R1',
+          startISO: '2025-03-01T08:00:00Z',
+          endISO: '2025-03-01T20:00:00Z',
+          type: 'BACKUP',
+          location: 'Support',
+        },
+        {
+          id: 'PRIMARY_DAY',
+          residentId: 'R1',
+          startISO: '2025-03-10T08:00:00Z',
+          endISO: '2025-03-10T20:00:00Z',
+          type: 'MOSES',
+          location: 'Unit A',
+        },
+        {
+          id: 'COUNTERPART_DAY',
+          residentId: 'R2',
+          startISO: '2025-03-10T08:00:00Z',
+          endISO: '2025-03-10T20:00:00Z',
+          type: 'MOSES',
+          location: 'Unit A',
+        },
+        {
+          id: 'COUNTERPART_BACKUP',
+          residentId: 'R3',
+          startISO: '2025-03-15T08:00:00Z',
+          endISO: '2025-03-15T20:00:00Z',
+          type: 'BACKUP',
+          location: 'Support',
+        },
+      ],
+    };
+
+    const capturedPairs: ShiftPair[][] = [];
+    const evaluateSpy = vi.spyOn(workerPool, 'evaluatePairs').mockImplementation(async (pairs) => {
+      capturedPairs.push(pairs);
+      return [];
+    });
+
+    const swaps = await findBestSwaps(dataset, 'R1', {
+      today: '2025-03-01T00:00:00Z',
+    });
+
+    expect(swaps).toEqual([]);
+    expect(evaluateSpy).toHaveBeenCalledTimes(1);
+    const [pairs] = capturedPairs;
+    expect(pairs).toBeDefined();
+    expect(pairs?.length).toBe(1);
+    expect(pairs?.every((pair) => pair.a.type !== 'BACKUP' && pair.b.type !== 'BACKUP')).toBe(true);
+    expect(pairs?.[0]?.a.id).toBe('PRIMARY_DAY');
+    expect(pairs?.[0]?.b.id).toBe('COUNTERPART_DAY');
+
+    evaluateSpy.mockRestore();
   });
 
   it('summarizes rejection reasons when no best swaps are feasible', async () => {
