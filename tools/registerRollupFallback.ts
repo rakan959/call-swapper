@@ -1,9 +1,15 @@
 import Module from 'node:module';
 
 const isModuleNotFound = (error: unknown): error is NodeJS.ErrnoException =>
-  error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND';
+  error instanceof Error &&
+  'code' in error &&
+  (error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND';
 
-type NodeModuleLoader = (request: string, parent: NodeModule | undefined, isMain: boolean) => unknown;
+type NodeModuleLoader = (
+  request: string,
+  parent: NodeModule | undefined,
+  isMain: boolean,
+) => unknown;
 
 const moduleLoader = Module as unknown as { _load: NodeModuleLoader };
 
