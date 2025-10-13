@@ -35,7 +35,7 @@
     "@types/node": "^20.12.12",
     "@types/papaparse": "^5.3.16",
     "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
+    "@types/react-dom": "^19.2.1",
     "@rollup/wasm-node": "^4.52.4",
     "@vitejs/plugin-react": "^5.0.4",
     "@vitest/coverage-v8": "^3.2.4",
