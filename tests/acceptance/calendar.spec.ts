@@ -38,7 +38,7 @@ describe('Calendar & Swaps (acceptance skeleton)', () => {
     const target = ds.shifts.find((shift) => shift.id.endsWith('MOSES_JR'));
     expect(target).toBeDefined();
     if (!target) return;
-    const swaps = await findSwapsForShift(ds, target);
+    const { accepted: swaps } = await findSwapsForShift(ds, target);
     expect(swaps.length).toBeGreaterThanOrEqual(0);
     swaps.forEach((swap) => {
       expect(swap.pressure.baselineScore).toBeTypeOf('number');
@@ -48,7 +48,7 @@ describe('Calendar & Swaps (acceptance skeleton)', () => {
 
   it('find best swaps ranks results (placeholder to fail)', async () => {
     const ds = parseCsvToDataset(CSV);
-    const swaps = await findBestSwaps(ds, 'resident-alice-rivers');
+    const { accepted: swaps } = await findBestSwaps(ds, 'resident-alice-rivers');
     expect(swaps.length).toBeGreaterThanOrEqual(0);
     if (swaps.length > 1) {
       const scores = swaps.map((swap) => swap.score);

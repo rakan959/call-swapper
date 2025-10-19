@@ -27,7 +27,7 @@ import {
   ResidentRotationsMap,
   ResidentAcademicYearMap,
 } from '@utils/rotations';
-import { findBestSwaps } from '@engine/swapEngine';
+import { findBestSwaps, SwapRejectionDetail, SwapSearchResult } from '@engine/swapEngine';
 import SidePanel from './components/SidePanel';
 import { SHIFT_PALETTE, LegendPaletteEntry } from './components/Legend';
 import PressureBreakdown from './components/PressureBreakdown';
@@ -87,7 +87,7 @@ type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
 type BestSwapsState = {
   status: 'idle' | 'loading' | 'ready' | 'error';
-  candidates: SwapCandidate[];
+  result: SwapSearchResult | null;
   error: string | null;
 };
 
@@ -252,6 +252,7 @@ type AllSwapsPanelProps = Readonly<{
   status: BestSwapsState['status'];
   error: string | null;
   candidates: SwapCandidate[];
+  rejections: SwapRejectionDetail[];
   residentsById: Map<string, Resident>;
   residentNameById: Map<string, string>;
   selectedResidentName: string | null;
@@ -280,6 +281,7 @@ function AllSwapsPanel({
   status,
   error,
   candidates,
+  rejections,
   residentsById,
   residentNameById,
   selectedResidentName,
@@ -297,6 +299,47 @@ function AllSwapsPanel({
       (candidate) => candidate.a.type !== 'BACKUP' && candidate.b.type !== 'BACKUP',
     );
   }, [candidates]);
+
+  const filteredRejections = useMemo(() => {
+    return rejections.filter(
+      (entry) => !['moses-tier-mismatch', 'weekend-mismatch'].includes(entry.reason.kind),
+    );
+  }, [rejections]);
+
+  const rejectedGeneral = useMemo(() => {
+    return filteredRejections.filter((entry) => entry.category === 'general');
+  }, [filteredRejections]);
+
+  const rejectedShabbos = useMemo(() => {
+    return filteredRejections.filter((entry) => entry.category === 'shabbos');
+  }, [filteredRejections]);
+
+  const shouldShowGeneral = settings.showRejectedSwaps && rejectedGeneral.length > 0;
+  const shouldShowShabbos = settings.showShabbosRejectedSwaps && rejectedShabbos.length > 0;
+  const renderRejectedSection = (label: string, items: SwapRejectionDetail[]) => (
+    <section className="debug-swaps__section" aria-label={label}>
+      <h4 className="debug-swaps__title">{label}</h4>
+      <ul className="debug-swaps__list">
+        {items.map((entry) => {
+          const counterpartName = residentNameById.get(entry.b.residentId) ?? entry.b.residentId;
+          const swapDate = dateFormatter.format(new Date(entry.b.startISO));
+          const scoreLabel = formatScore(entry.score);
+          return (
+            <li key={`rejected-${entry.a.id}-${entry.b.id}`} className="debug-swaps__item">
+              <div className="debug-swaps__row">
+                <span className="debug-swaps__col debug-swaps__col--date">{swapDate}</span>
+                <span className="debug-swaps__col debug-swaps__col--resident">
+                  {counterpartName}
+                </span>
+                <span className="debug-swaps__col debug-swaps__col--score">{scoreLabel}</span>
+              </div>
+              <p className="debug-swaps__reason">{entry.reasonLabel}</p>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
 
   useEffect(() => {
     setSortKey(settings.defaultSortKey);
@@ -421,10 +464,24 @@ function AllSwapsPanel({
     );
   }
 
-  return <div className="all-swaps-panel">{body}</div>;
+  const debugSections = (shouldShowGeneral || shouldShowShabbos) && (
+    <div className="debug-swaps">
+      {shouldShowGeneral && renderRejectedSection('Rejected swaps (debug)', rejectedGeneral)}
+      {shouldShowShabbos &&
+        renderRejectedSection('Rejected Shabbos swaps (debug)', rejectedShabbos)}
+    </div>
+  );
+
+  return (
+    <div className="all-swaps-panel">
+      {body}
+      {debugSections}
+    </div>
+  );
 }
 
 export default function App(): JSX.Element {
+  const initialSwapSettings = useMemo(() => loadSwapSettings(), []);
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -439,17 +496,21 @@ export default function App(): JSX.Element {
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
   const [bestSwapsState, setBestSwapsState] = useState<BestSwapsState>({
     status: 'idle',
-    candidates: [],
+    result: null,
     error: null,
   });
   const [expandedSwapId, setExpandedSwapId] = useState<string | null>(null);
-  const [swapSettings, setSwapSettings] = useState<SwapSettings>(() => loadSwapSettings());
+  const [swapSettings, setSwapSettings] = useState<SwapSettings>(initialSwapSettings);
   const [isSwapSettingsOpen, setIsSwapSettingsOpen] = useState(false);
+  const [isDebugMenuUnlocked, setIsDebugMenuUnlocked] = useState(() =>
+    Boolean(initialSwapSettings.showRejectedSwaps || initialSwapSettings.showShabbosRejectedSwaps),
+  );
 
   const calendarContainerRef = useRef<HTMLDivElement | null>(null);
   const calendarRef = useRef<Calendar | null>(null);
   const bestSwapsRequestTokenRef = useRef(0);
   const swapSettingsContainerRef = useRef<HTMLDivElement | null>(null);
+  const hasAnnouncedDebugMenuRef = useRef(false);
 
   const updateSwapSettings = useCallback(
     (update: Partial<SwapSettings>) => {
@@ -458,6 +519,9 @@ export default function App(): JSX.Element {
         defaultSortDirection: update.defaultSortDirection ?? current.defaultSortDirection,
         hideNegativeResident: update.hideNegativeResident ?? current.hideNegativeResident,
         hideNegativeTotal: update.hideNegativeTotal ?? current.hideNegativeTotal,
+        showRejectedSwaps: update.showRejectedSwaps ?? current.showRejectedSwaps,
+        showShabbosRejectedSwaps:
+          update.showShabbosRejectedSwaps ?? current.showShabbosRejectedSwaps,
       }));
     },
     [setSwapSettings],
@@ -489,6 +553,43 @@ export default function App(): JSX.Element {
     };
   }, [isSwapSettingsOpen]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const runtimeWindow = window as typeof window & {
+      swapFinderDebug?: {
+        showDebugMenu: () => void;
+        hideDebugMenu: () => void;
+        toggleDebugMenu: () => void;
+        isDebugMenuVisible: () => boolean;
+      };
+    };
+
+    const api = {
+      showDebugMenu: () => setIsDebugMenuUnlocked(true),
+      hideDebugMenu: () => setIsDebugMenuUnlocked(false),
+      toggleDebugMenu: () => setIsDebugMenuUnlocked((previous) => !previous),
+      isDebugMenuVisible: () => isDebugMenuUnlocked,
+    };
+
+    runtimeWindow.swapFinderDebug = api;
+
+    if (!hasAnnouncedDebugMenuRef.current && !isDebugMenuUnlocked) {
+      console.info(
+        'Call Swap Finder debug settings are hidden. Run window.swapFinderDebug.showDebugMenu() to reveal them.',
+      );
+      hasAnnouncedDebugMenuRef.current = true;
+    }
+
+    return () => {
+      if (runtimeWindow.swapFinderDebug === api) {
+        delete runtimeWindow.swapFinderDebug;
+      }
+    };
+  }, [isDebugMenuUnlocked]);
+
   const handleDefaultSortKeySettingChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const key = event.target.value as SwapSortKey;
     updateSwapSettings({
@@ -509,6 +610,16 @@ export default function App(): JSX.Element {
 
   const handleToggleHideNegativeTotal = () => {
     updateSwapSettings({ hideNegativeTotal: !swapSettings.hideNegativeTotal });
+  };
+
+  const handleToggleShowRejectedSwaps = () => {
+    updateSwapSettings({ showRejectedSwaps: !swapSettings.showRejectedSwaps });
+  };
+
+  const handleToggleShowShabbosRejectedSwaps = () => {
+    updateSwapSettings({
+      showShabbosRejectedSwaps: !swapSettings.showShabbosRejectedSwaps,
+    });
   };
 
   const defaultSortDirectionText = useMemo(() => {
@@ -729,7 +840,7 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     bestSwapsRequestTokenRef.current += 1;
-    setBestSwapsState({ status: 'idle', candidates: [], error: null });
+    setBestSwapsState({ status: 'idle', result: null, error: null });
   }, [dataset, selectedResidentId]);
 
   const handleFindBestSwaps = useCallback(async () => {
@@ -739,35 +850,35 @@ export default function App(): JSX.Element {
     setExpandedSwapId(null);
     const token = bestSwapsRequestTokenRef.current + 1;
     bestSwapsRequestTokenRef.current = token;
-    setBestSwapsState({ status: 'loading', candidates: [], error: null });
+    setBestSwapsState({ status: 'loading', result: null, error: null });
     try {
-      const results = await findBestSwaps(dataset, selectedResidentId);
+      const results = await findBestSwaps(dataset, selectedResidentId, {
+        collectRejections: true,
+      });
       if (bestSwapsRequestTokenRef.current !== token) {
         return;
       }
-      setBestSwapsState({ status: 'ready', candidates: results, error: null });
+      setBestSwapsState({ status: 'ready', result: results, error: null });
     } catch (error: unknown) {
       if (bestSwapsRequestTokenRef.current !== token) {
         return;
       }
       const message =
         error instanceof Error ? error.message : 'Unknown error while finding best swaps';
-      setBestSwapsState({ status: 'error', candidates: [], error: message });
+      setBestSwapsState({ status: 'error', result: null, error: message });
     }
   }, [dataset, selectedResidentId]);
 
+  const bestSwapsAccepted = bestSwapsState.result?.accepted ?? [];
+
   const filteredBestSwaps = useMemo(() => {
-    return filterCandidatesBySettings(bestSwapsState.candidates, {
+    return filterCandidatesBySettings(bestSwapsAccepted, {
       hideNegativeResident: swapSettings.hideNegativeResident,
       hideNegativeTotal: swapSettings.hideNegativeTotal,
     });
-  }, [
-    bestSwapsState.candidates,
-    swapSettings.hideNegativeResident,
-    swapSettings.hideNegativeTotal,
-  ]);
+  }, [bestSwapsAccepted, swapSettings.hideNegativeResident, swapSettings.hideNegativeTotal]);
 
-  const hiddenBestSwapsCount = bestSwapsState.candidates.length - filteredBestSwaps.length;
+  const hiddenBestSwapsCount = bestSwapsAccepted.length - filteredBestSwaps.length;
 
   const topBestSwaps = useMemo(() => {
     return filteredBestSwaps.slice(0, 10);
@@ -1361,6 +1472,35 @@ export default function App(): JSX.Element {
                       <span>Hide swaps when the combined score is negative</span>
                     </label>
                   </fieldset>
+                  {isDebugMenuUnlocked && (
+                    <fieldset className="swap-settings__fieldset">
+                      <legend className="swap-settings__legend">Debug</legend>
+                      <label
+                        htmlFor="swap-setting-show-rejected"
+                        className="swap-settings__checkbox"
+                      >
+                        <input
+                          id="swap-setting-show-rejected"
+                          type="checkbox"
+                          checked={swapSettings.showRejectedSwaps}
+                          onChange={handleToggleShowRejectedSwaps}
+                        />
+                        <span>Show rejected swaps with score preview</span>
+                      </label>
+                      <label
+                        htmlFor="swap-setting-show-shabbos-rejected"
+                        className="swap-settings__checkbox"
+                      >
+                        <input
+                          id="swap-setting-show-shabbos-rejected"
+                          type="checkbox"
+                          checked={swapSettings.showShabbosRejectedSwaps}
+                          onChange={handleToggleShowShabbosRejectedSwaps}
+                        />
+                        <span>Highlight rejected Shabbos swaps</span>
+                      </label>
+                    </fieldset>
+                  )}
                 </dialog>
               )}
             </div>
@@ -1423,7 +1563,8 @@ export default function App(): JSX.Element {
           <AllSwapsPanel
             status={bestSwapsState.status}
             error={bestSwapsState.error}
-            candidates={bestSwapsState.candidates}
+            candidates={bestSwapsAccepted}
+            rejections={bestSwapsState.result?.rejected ?? []}
             residentsById={residentsById}
             residentNameById={residentNameById}
             selectedResidentName={filteredResident?.name ?? null}

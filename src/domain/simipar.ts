@@ -13,6 +13,14 @@ import {
 const COMFORTABLE_REST_BUFFER_HOURS = 12;
 const CALL_WINDOW_DAYS = 4;
 const CALL_WINDOW_HOURS = CALL_WINDOW_DAYS * 24;
+const CALL_CHAIN_WINDOW_DAYS = 28;
+const CALL_CHAIN_MAX_GAP_DAYS = 2;
+const CALL_CHAIN_THRESHOLD = 3;
+const CALL_CHAIN_PENALTY_PER_EXTRA = 0.25;
+const WEEKEND_STREAK_LOOKBACK_WEEKS = 6;
+const WEEKEND_STREAK_MAX_GAP_WEEKS = 1;
+const WEEKEND_STREAK_THRESHOLD = 1;
+const WEEKEND_STREAK_PENALTY_PER_EXTRA = 0.4;
 const ZERO_CALLS: SwapPressureCall[] = [];
 const MIN_CLOSENESS = 1e-3;
 const SCORE_SCALE = 100;
@@ -162,7 +170,9 @@ function buildSection(
     entries.push({ shift, before, after, weight });
   }
 
-  if (entries.length === 0) {
+  const hasExtras = baseline.extras.size > 0 || swapped.extras.size > 0;
+
+  if (entries.length === 0 && !hasExtras) {
     return {
       residentId: baselineShift.residentId,
       focusShiftId: baselineShift.id,
@@ -201,6 +211,10 @@ function buildSection(
     });
   }
 
+  const extraTotals = appendScenarioExtras(calls, baseline.extras, swapped.extras);
+  baselineTotal += extraTotals.baseline;
+  swappedTotal += extraTotals.swapped;
+
   calls.sort((a, b) => {
     const deltaMagnitude = Math.abs(b.delta) - Math.abs(a.delta);
     if (deltaMagnitude !== 0) {
@@ -233,7 +247,60 @@ type ScenarioContribution = {
 type ScenarioSummary = {
   contributions: Map<string, ScenarioContribution>;
   weightTotal: number;
+  extras: Map<string, ScenarioExtra>;
 };
+
+type ScenarioExtra = {
+  id: string;
+  penalty: number;
+  label: string | null;
+  shift: Shift;
+  calendarContext: SwapPressureCall['calendarContext'];
+};
+
+function appendScenarioExtras(
+  calls: SwapPressureCall[],
+  baselineExtras: Map<string, ScenarioExtra>,
+  swappedExtras: Map<string, ScenarioExtra>,
+): { baseline: number; swapped: number } {
+  let baselineTotal = 0;
+  let swappedTotal = 0;
+
+  const extraIds = new Set<string>([...baselineExtras.keys(), ...swappedExtras.keys()]);
+  for (const extraId of extraIds) {
+    const baselineExtra = baselineExtras.get(extraId);
+    const swappedExtra = swappedExtras.get(extraId);
+    if (!baselineExtra && !swappedExtra) {
+      continue;
+    }
+
+    const template = baselineExtra ?? swappedExtra;
+    if (!template) {
+      continue;
+    }
+
+    const baselineContribution = baselineExtra?.penalty ?? 0;
+    const swappedContribution = swappedExtra?.penalty ?? 0;
+
+    calls.push({
+      shiftId: `${extraId}:${template.shift.id}`,
+      shiftType: template.shift.type,
+      startISO: template.shift.startISO,
+      endISO: template.shift.endISO,
+      weight: 0,
+      baseline: baselineContribution,
+      swapped: swappedContribution,
+      delta: swappedContribution - baselineContribution,
+      calendarContext: template.calendarContext ?? null,
+      rotationLabel: template.label,
+    });
+
+    baselineTotal += baselineContribution;
+    swappedTotal += swappedContribution;
+  }
+
+  return { baseline: baselineTotal, swapped: swappedTotal };
+}
 
 function resolveShiftMultiplier(shift: Shift): number {
   if (shift.type === 'BACKUP') {
@@ -501,6 +568,10 @@ function resolveRotationPressureBonus(
     return { value: 0, label: null };
   }
 
+  if (isWeekend(shift.startISO) || isWeekend(shift.endISO)) {
+    return { value: 0, label: null };
+  }
+
   const assignment = findRotationForDate(resident.rotations, shift.startISO);
   if (!assignment) {
     return { value: 0, label: null };
@@ -572,9 +643,22 @@ function collectScenario(
     weightTotal += closeness;
   }
 
+  const extras = new Map<string, ScenarioExtra>();
+
+  const chainExtra = analyzeCallChain(focusShift, otherShifts);
+  if (chainExtra) {
+    extras.set(chainExtra.id, chainExtra);
+  }
+
+  const weekendExtra = analyzeWeekendStreak(focusShift, otherShifts);
+  if (weekendExtra) {
+    extras.set(weekendExtra.id, weekendExtra);
+  }
+
   return {
     contributions,
     weightTotal,
+    extras,
   };
 }
 
@@ -604,4 +688,213 @@ function normaliseGap(value: number, restMin: number, comfortable: number): numb
     return 1;
   }
   return (value - restMin) / (comfortable - restMin);
+}
+
+function isCallShift(shift: Shift): boolean {
+  return shift.type !== 'BACKUP';
+}
+
+type ChainContext = {
+  focusDay: dayjs.Dayjs;
+  sortedDays: dayjs.Dayjs[];
+  focusIndex: number;
+};
+
+type WeekendContext = {
+  sortedWeeks: dayjs.Dayjs[];
+  focusIndex: number;
+};
+
+function gatherChainContext(focusShift: Shift, otherShifts: Shift[]): ChainContext | null {
+  if (!isCallShift(focusShift)) {
+    return null;
+  }
+
+  const focusStart = dayjs(focusShift.startISO);
+  if (!focusStart.isValid()) {
+    return null;
+  }
+
+  const focusDay = focusStart.startOf('day');
+  const entries = new Map<string, dayjs.Dayjs>([[focusDay.format('YYYY-MM-DD'), focusDay]]);
+
+  for (const shift of otherShifts) {
+    if (!isCallShift(shift)) {
+      continue;
+    }
+
+    const day = dayjs(shift.startISO).startOf('day');
+    if (!day.isValid()) {
+      continue;
+    }
+
+    const distance = Math.abs(day.diff(focusDay, 'day'));
+    if (distance > CALL_CHAIN_WINDOW_DAYS) {
+      continue;
+    }
+
+    entries.set(day.format('YYYY-MM-DD'), day);
+  }
+
+  const sortedDays = [...entries.values()].sort((a, b) => a.valueOf() - b.valueOf());
+  const focusIndex = sortedDays.findIndex((day) => day.isSame(focusDay, 'day'));
+  if (focusIndex < 0) {
+    return null;
+  }
+
+  return { focusDay, sortedDays, focusIndex };
+}
+
+function gatherWeekendContext(focusShift: Shift, otherShifts: Shift[]): WeekendContext | null {
+  const focusIsWeekend = isWeekend(focusShift.startISO) || isWeekend(focusShift.endISO);
+  if (!focusIsWeekend || !isCallShift(focusShift)) {
+    return null;
+  }
+
+  const focusWeekStart = dayjs(focusShift.startISO).startOf('week');
+  if (!focusWeekStart.isValid()) {
+    return null;
+  }
+
+  const entries = new Map<string, dayjs.Dayjs>([
+    [focusWeekStart.format('YYYY-MM-DD'), focusWeekStart],
+  ]);
+
+  for (const shift of otherShifts) {
+    if (!isCallShift(shift)) {
+      continue;
+    }
+    if (!isWeekend(shift.startISO) && !isWeekend(shift.endISO)) {
+      continue;
+    }
+
+    const weekStart = dayjs(shift.startISO).startOf('week');
+    if (!weekStart.isValid()) {
+      continue;
+    }
+
+    const weekDistance = Math.abs(weekStart.diff(focusWeekStart, 'week'));
+    if (weekDistance > WEEKEND_STREAK_LOOKBACK_WEEKS) {
+      continue;
+    }
+
+    entries.set(weekStart.format('YYYY-MM-DD'), weekStart);
+  }
+
+  const sortedWeeks = [...entries.values()].sort((a, b) => a.valueOf() - b.valueOf());
+  const focusIndex = sortedWeeks.findIndex((week) => week.isSame(focusWeekStart, 'day'));
+  if (focusIndex < 0) {
+    return null;
+  }
+
+  return { sortedWeeks, focusIndex };
+}
+
+function expandIndexRange(
+  values: dayjs.Dayjs[],
+  startIndex: number,
+  maxGapDays: number,
+): { start: number; end: number } {
+  let start = startIndex;
+  let end = startIndex;
+
+  while (start > 0) {
+    const current = values[start]!;
+    const previous = values[start - 1]!;
+    if (current.diff(previous, 'day') <= maxGapDays) {
+      start -= 1;
+    } else {
+      break;
+    }
+  }
+
+  while (end < values.length - 1) {
+    const current = values[end]!;
+    const next = values[end + 1]!;
+    if (next.diff(current, 'day') <= maxGapDays) {
+      end += 1;
+    } else {
+      break;
+    }
+  }
+
+  return { start, end };
+}
+
+function computeChainPenalty(chainLength: number, spanLength: number): number {
+  const severity = chainLength - CALL_CHAIN_THRESHOLD;
+  if (severity <= 0) {
+    return 0;
+  }
+
+  const density = spanLength > 0 ? chainLength / spanLength : chainLength;
+  return -severity * CALL_CHAIN_PENALTY_PER_EXTRA * Math.max(1, density);
+}
+
+function analyzeCallChain(focusShift: Shift, otherShifts: Shift[]): ScenarioExtra | null {
+  const context = gatherChainContext(focusShift, otherShifts);
+  if (!context) {
+    return null;
+  }
+
+  const { start, end } = expandIndexRange(
+    context.sortedDays,
+    context.focusIndex,
+    CALL_CHAIN_MAX_GAP_DAYS,
+  );
+  const chainLength = end - start + 1;
+  if (chainLength <= CALL_CHAIN_THRESHOLD) {
+    return null;
+  }
+
+  const leftDay = context.sortedDays[start]!;
+  const rightDay = context.sortedDays[end]!;
+  const spanDays = rightDay.diff(leftDay, 'day');
+  const spanLength = spanDays + 1;
+  const penalty = computeChainPenalty(chainLength, spanLength);
+  if (penalty === 0) {
+    return null;
+  }
+
+  return {
+    id: 'penalty:chain',
+    penalty,
+    label: `Chain load ×${chainLength}`,
+    shift: focusShift,
+    calendarContext: null,
+  };
+}
+
+function computeWeekendPenalty(streakLength: number): number {
+  const severity = streakLength - WEEKEND_STREAK_THRESHOLD;
+  if (severity <= 0) {
+    return 0;
+  }
+  return -severity * WEEKEND_STREAK_PENALTY_PER_EXTRA;
+}
+
+function analyzeWeekendStreak(focusShift: Shift, otherShifts: Shift[]): ScenarioExtra | null {
+  const context = gatherWeekendContext(focusShift, otherShifts);
+  if (!context) {
+    return null;
+  }
+
+  const { start, end } = expandIndexRange(
+    context.sortedWeeks,
+    context.focusIndex,
+    WEEKEND_STREAK_MAX_GAP_WEEKS * 7,
+  );
+  const streakLength = end - start + 1;
+  const penalty = computeWeekendPenalty(streakLength);
+  if (penalty === 0) {
+    return null;
+  }
+
+  return {
+    id: 'penalty:weekend',
+    penalty,
+    label: `Weekend streak ×${streakLength}`,
+    shift: focusShift,
+    calendarContext: 'weekend',
+  };
 }

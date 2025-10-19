@@ -6,6 +6,8 @@ export type SwapSettings = Readonly<{
   defaultSortDirection: SortDirection;
   hideNegativeResident: boolean;
   hideNegativeTotal: boolean;
+  showRejectedSwaps: boolean;
+  showShabbosRejectedSwaps: boolean;
 }>;
 
 export const DEFAULT_SWAP_SETTINGS: SwapSettings = {
@@ -13,6 +15,8 @@ export const DEFAULT_SWAP_SETTINGS: SwapSettings = {
   defaultSortDirection: defaultSortDirection('score'),
   hideNegativeResident: true,
   hideNegativeTotal: true,
+  showRejectedSwaps: false,
+  showShabbosRejectedSwaps: false,
 };
 
 const SETTINGS_COOKIE_NAME = 'swapSettings';
@@ -61,7 +65,7 @@ const writeCookie = (name: string, value: string, maxAgeSeconds: number): void =
   document.cookie = `${encodedName}=${encodedValue}; max-age=${maxAgeSeconds}; path=/; samesite=lax`;
 };
 
-export const loadSwapSettings = (): SwapSettings => {
+export function loadSwapSettings(): SwapSettings {
   try {
     const cookieValue = readCookie(SETTINGS_COOKIE_NAME);
     if (!cookieValue) {
@@ -84,11 +88,21 @@ export const loadSwapSettings = (): SwapSettings => {
       parsed.hideNegativeTotal,
       DEFAULT_SWAP_SETTINGS.hideNegativeTotal,
     );
+    const showRejectedSwaps = ensureBoolean(
+      parsed.showRejectedSwaps,
+      DEFAULT_SWAP_SETTINGS.showRejectedSwaps,
+    );
+    const showShabbosRejectedSwaps = ensureBoolean(
+      parsed.showShabbosRejectedSwaps,
+      DEFAULT_SWAP_SETTINGS.showShabbosRejectedSwaps,
+    );
     return {
       defaultSortKey,
       defaultSortDirection,
       hideNegativeResident,
       hideNegativeTotal,
+      showRejectedSwaps,
+      showShabbosRejectedSwaps,
     };
   } catch (error) {
     debugError('swapSettings.parse-error', () => ({
@@ -96,9 +110,9 @@ export const loadSwapSettings = (): SwapSettings => {
     }));
     return DEFAULT_SWAP_SETTINGS;
   }
-};
+}
 
-export const saveSwapSettings = (settings: SwapSettings): void => {
+export function saveSwapSettings(settings: SwapSettings): void {
   const serialized = JSON.stringify(settings);
   writeCookie(SETTINGS_COOKIE_NAME, serialized, SETTINGS_COOKIE_MAX_AGE);
-};
+}

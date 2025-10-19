@@ -10,16 +10,18 @@ type PressureBreakdownProps = Readonly<{
   valueFormatter: Intl.NumberFormat;
   deltaFormatter: Intl.NumberFormat;
   className?: string;
+  residentFocus?: 'all' | string;
 }>;
 
 type PreparedSection = {
+  kind: 'original' | 'counterpart';
   label: string;
   calls: PreparedCall[];
   deltaTotal: number;
   deltaFormatted: string;
   deltaSign: 'positive' | 'negative' | 'neutral';
   totalDisplay: string;
-  isFiltered: boolean;
+  residentId: string;
   accessibleTotalLabel: string;
 };
 
@@ -29,46 +31,6 @@ type PreparedCall = {
   score: string;
   deltaSign: 'positive' | 'negative' | 'neutral';
 };
-
-function prepareSection(
-  section: SwapPressureSection,
-  label: string,
-  deltaFormatter: Intl.NumberFormat,
-  totalFormatted: string,
-  filteredResidentId: string,
-  filteredTotalFormatted: string,
-): PreparedSection {
-  const sortedCalls = [...section.calls].sort((left, right) => right.delta - left.delta);
-
-  const calls: PreparedCall[] = sortedCalls.map((call) => ({
-    id: call.shiftId,
-    label: formatCallLabel(call),
-    score: formatContributionWithFormatter(deltaFormatter, call.delta),
-    deltaSign: resolveSign(call.delta),
-  }));
-
-  const deltaTotal = section.deltaTotal;
-
-  const deltaFormatted = formatContributionWithFormatter(deltaFormatter, deltaTotal);
-  const isFiltered = section.residentId === filteredResidentId;
-  const totalDisplay = isFiltered
-    ? `${filteredTotalFormatted}|${totalFormatted}`
-    : `${deltaFormatted}|${totalFormatted}`;
-  const accessibleTotalLabel = isFiltered
-    ? `Resident delta ${filteredTotalFormatted}, combined total ${totalFormatted}`
-    : `Resident delta ${deltaFormatted}, combined total ${totalFormatted}`;
-
-  return {
-    label,
-    calls,
-    deltaTotal,
-    deltaFormatted,
-    deltaSign: resolveSign(deltaTotal),
-    totalDisplay,
-    isFiltered,
-    accessibleTotalLabel,
-  };
-}
 
 function resolveSign(value: number): 'positive' | 'negative' | 'neutral' {
   if (value > 0) {
@@ -125,39 +87,63 @@ export default function PressureBreakdown({
   valueFormatter: _valueFormatter,
   deltaFormatter,
   className,
+  residentFocus = 'all',
 }: PressureBreakdownProps): JSX.Element {
   const sections = useMemo(() => {
     const totalFormatted = formatContributionWithFormatter(deltaFormatter, pressure.score);
-    const filteredResidentId = pressure.original.residentId;
-    const filteredTotalFormatted = formatContributionWithFormatter(
-      deltaFormatter,
-      pressure.original.deltaTotal,
-    );
-    const original = prepareSection(
-      pressure.original,
-      originalLabel,
-      deltaFormatter,
-      totalFormatted,
-      filteredResidentId,
-      filteredTotalFormatted,
-    );
-    const counterpart = prepareSection(
-      pressure.counterpart,
-      counterpartLabel,
-      deltaFormatter,
-      totalFormatted,
-      filteredResidentId,
-      filteredTotalFormatted,
-    );
-    return [original, counterpart];
+
+    const createSection = (
+      section: SwapPressureSection,
+      label: string,
+      kind: 'original' | 'counterpart',
+    ): PreparedSection => {
+      const sortedCalls = [...section.calls].sort((left, right) => right.delta - left.delta);
+
+      const calls: PreparedCall[] = sortedCalls.map((call) => ({
+        id: call.shiftId,
+        label: formatCallLabel(call),
+        score: formatContributionWithFormatter(deltaFormatter, call.delta),
+        deltaSign: resolveSign(call.delta),
+      }));
+
+      const deltaFormatted = formatContributionWithFormatter(deltaFormatter, section.deltaTotal);
+      const accessibleTotalLabel = `Resident delta ${deltaFormatted}, combined total ${totalFormatted}`;
+
+      return {
+        kind,
+        label,
+        calls,
+        deltaTotal: section.deltaTotal,
+        deltaFormatted,
+        deltaSign: resolveSign(section.deltaTotal),
+        totalDisplay: `${deltaFormatted}|${totalFormatted}`,
+        residentId: section.residentId,
+        accessibleTotalLabel,
+      };
+    };
+
+    return [
+      createSection(pressure.original, originalLabel, 'original'),
+      createSection(pressure.counterpart, counterpartLabel, 'counterpart'),
+    ];
   }, [pressure, originalLabel, counterpartLabel, deltaFormatter]);
+
+  const focusResidentId = residentFocus === 'all' ? null : residentFocus;
+
+  const visibleSections = useMemo(() => {
+    if (!focusResidentId) {
+      return sections;
+    }
+    const filtered = sections.filter((section) => section.residentId === focusResidentId);
+    return filtered.length > 0 ? filtered : sections;
+  }, [sections, focusResidentId]);
 
   const rootClassName = ['pressure-breakdown', className].filter(Boolean).join(' ');
 
   return (
     <div className={rootClassName}>
-      {sections.map((section, index) => {
-        const captionId = `pressure-breakdown-${index}`;
+      {visibleSections.map((section) => {
+        const captionId = `pressure-breakdown-${section.kind}`;
         return (
           <section key={section.label} className="pressure-breakdown__section">
             <h4>Pressure on {section.label}</h4>

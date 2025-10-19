@@ -3,6 +3,7 @@
  * @req: F-011
  */
 import { describe, expect, it } from 'vitest';
+import dayjs from '@utils/dayjs';
 import { calculateSwapPressure, proximityPressure } from '@domain/simipar';
 import { resolveShabbosObservers } from '@domain/shabbos';
 import type { Context, Resident, RotationAssignment, RuleConfig, Shift } from '@domain/types';
@@ -447,6 +448,187 @@ describe('calculateSwapPressure', () => {
     );
     expect(rotationCall?.delta).toBeCloseTo(100, 6);
     expect(rotationCall?.rotationLabel ?? '').toContain('GI');
+  });
+
+  it('does not apply a rotation pressure bonus on weekend calls', () => {
+    const giRotation: RotationAssignment = {
+      weekStartISO: '2025-10-06T00:00:00.000Z',
+      rotation: 'GI',
+      rawRotation: 'GI',
+      vacationDates: [],
+    };
+
+    const residentWithRotation = buildResident('R1', ['MOSES'], [giRotation]);
+    const residentWithoutRotation = buildResident('R1', ['MOSES']);
+    const residentB = buildResident('R2', ['MOSES']);
+
+    const weekendShift = buildShift(
+      'SA-weekend',
+      'R1',
+      '2025-10-11T08:00:00Z',
+      '2025-10-11T18:00:00Z',
+      'MOSES',
+    );
+    const counterpartShift = buildShift(
+      'SB-weekend',
+      'R2',
+      '2025-10-13T08:00:00Z',
+      '2025-10-13T18:00:00Z',
+      'MOSES',
+    );
+
+    const ctxWithRotation = buildContext(
+      [residentWithRotation, residentB],
+      {
+        R1: [weekendShift],
+        R2: [counterpartShift],
+      },
+      { restHoursMin: 0 },
+    );
+
+    const ctxWithoutRotation = buildContext(
+      [residentWithoutRotation, residentB],
+      {
+        R1: [weekendShift],
+        R2: [counterpartShift],
+      },
+      { restHoursMin: 0 },
+    );
+
+    const withRotation = calculateSwapPressure(weekendShift, counterpartShift, ctxWithRotation);
+    const withoutRotation = calculateSwapPressure(
+      weekendShift,
+      counterpartShift,
+      ctxWithoutRotation,
+    );
+
+    expect(withRotation.score).toBeCloseTo(withoutRotation.score, 6);
+    const rotationCall = withRotation.original.calls.find((call) =>
+      call.shiftId.startsWith('bonus:rotation:'),
+    );
+    expect(rotationCall).toBeUndefined();
+  });
+
+  it('penalizes dense call chains and rewards swaps that break them', () => {
+    const residentA = buildResident('R1', ['MOSES']);
+    const residentB = buildResident('R2', ['MOSES']);
+
+    const focusShift = buildShift(
+      'S-chain-focus',
+      'R1',
+      '2025-10-10T08:00:00Z',
+      '2025-10-10T20:00:00Z',
+      'MOSES',
+    );
+
+    const chainDates = [
+      '2025-10-02T08:00:00Z',
+      '2025-10-04T08:00:00Z',
+      '2025-10-06T08:00:00Z',
+      '2025-10-08T08:00:00Z',
+      '2025-10-12T08:00:00Z',
+      '2025-10-14T08:00:00Z',
+      '2025-10-16T08:00:00Z',
+      '2025-10-18T08:00:00Z',
+    ];
+
+    const chainShifts = chainDates.map((iso, index) =>
+      buildShift(`S-chain-${index}`, 'R1', iso, dayjs(iso).add(10, 'hour').toISOString(), 'MOSES'),
+    );
+
+    const reliefShift = buildShift(
+      'S-relief',
+      'R2',
+      '2025-11-25T08:00:00Z',
+      '2025-11-25T20:00:00Z',
+      'MOSES',
+    );
+
+    const ctx = buildContext(
+      [residentA, residentB],
+      {
+        R1: [...chainShifts, focusShift],
+        R2: [reliefShift],
+      },
+      { restHoursMin: 0 },
+    );
+
+    const breakdown = calculateSwapPressure(focusShift, reliefShift, ctx);
+
+    const chainCall = breakdown.original.calls.find((call) =>
+      call.shiftId.startsWith('penalty:chain'),
+    );
+
+    expect(chainCall).toBeDefined();
+    if (chainCall) {
+      expect(chainCall.baseline).toBeLessThan(0);
+      expect(chainCall.swapped).toBeCloseTo(0, 6);
+      expect(chainCall.rotationLabel ?? '').toContain('Chain load');
+    }
+
+    expect(breakdown.original.deltaTotal).toBeGreaterThan(0);
+  });
+
+  it('penalizes consecutive weekend streaks and relieves them with weekday swaps', () => {
+    const residentA = buildResident('R1', ['MOSES']);
+    const residentB = buildResident('R2', ['MOSES']);
+
+    const weekendFocus = buildShift(
+      'S-weekend-focus',
+      'R1',
+      '2025-10-11T08:00:00Z',
+      '2025-10-11T20:00:00Z',
+      'MOSES',
+    );
+
+    const priorWeekend = buildShift(
+      'S-weekend-prior',
+      'R1',
+      '2025-10-04T08:00:00Z',
+      '2025-10-04T20:00:00Z',
+      'MOSES',
+    );
+
+    const nextWeekend = buildShift(
+      'S-weekend-next',
+      'R1',
+      '2025-10-18T08:00:00Z',
+      '2025-10-18T20:00:00Z',
+      'MOSES',
+    );
+
+    const weekdayRelief = buildShift(
+      'S-weekday-relief',
+      'R2',
+      '2025-10-15T08:00:00Z',
+      '2025-10-15T20:00:00Z',
+      'MOSES',
+    );
+
+    const ctx = buildContext(
+      [residentA, residentB],
+      {
+        R1: [priorWeekend, weekendFocus, nextWeekend],
+        R2: [weekdayRelief],
+      },
+      { restHoursMin: 0 },
+    );
+
+    const breakdown = calculateSwapPressure(weekendFocus, weekdayRelief, ctx);
+
+    const weekendCall = breakdown.original.calls.find((call) =>
+      call.shiftId.startsWith('penalty:weekend'),
+    );
+
+    expect(weekendCall).toBeDefined();
+    if (weekendCall) {
+      expect(weekendCall.baseline).toBeLessThan(0);
+      expect(weekendCall.swapped).toBeCloseTo(0, 6);
+      expect(weekendCall.calendarContext).toBe('weekend');
+      expect(weekendCall.rotationLabel ?? '').toContain('Weekend streak');
+    }
+
+    expect(breakdown.original.deltaTotal).toBeGreaterThan(0);
   });
 
   it('penalizes swaps that assign a priority rotation call to another resident', () => {

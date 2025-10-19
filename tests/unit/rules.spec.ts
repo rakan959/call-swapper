@@ -393,6 +393,50 @@ describe('isFeasibleSwap', () => {
     expect(isFeasibleSwap(shiftA, shiftB, ctx)).toBe(false);
   });
 
+  it('rejects weekend swaps that overlap a vacation day', () => {
+    const residentA = buildResident(
+      'R1',
+      ['MOSES'],
+      [
+        {
+          weekStartISO: '2025-10-06T00:00:00.000Z',
+          rotation: 'Chest',
+          rawRotation: 'Chest (V11-12)',
+          vacationDates: ['2025-10-11'],
+        },
+      ],
+    );
+    const residentB = buildResident('R2', ['MOSES']);
+    const shiftA = buildShift('S1', 'R1', '2025-10-04T08:00:00Z', '2025-10-04T20:00:00Z', 'MOSES');
+    const weekendShift = buildShift(
+      'S2-weekend',
+      'R2',
+      '2025-10-11T08:00:00Z',
+      '2025-10-11T20:00:00Z',
+      'MOSES',
+    );
+
+    const ctx = buildContextWithShifts(
+      baseRuleConfig,
+      [residentA, residentB],
+      [
+        [residentA.id, [shiftA]],
+        [residentB.id, [weekendShift]],
+      ],
+    );
+
+    const evaluation = explainSwap(shiftA, weekendShift, ctx);
+    expect(evaluation.feasible).toBe(false);
+    if (!evaluation.feasible) {
+      expect(evaluation.reason.kind).toBe('vacation-conflict');
+      if (evaluation.reason.kind === 'vacation-conflict') {
+        expect(evaluation.reason.residentId).toBe('R1');
+        expect(evaluation.reason.conflictDates).toContain('2025-10-11');
+      }
+    }
+    expect(isFeasibleSwap(shiftA, weekendShift, ctx)).toBe(false);
+  });
+
   it('rejects swap when the incoming shift falls during a blocked rotation week', () => {
     const residentA = buildResident(
       'R1',

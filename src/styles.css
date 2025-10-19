@@ -135,61 +135,26 @@ body {
   gap: 1.75rem;
 }
 
-.calendar-panel,
-.legend-panel {
-  background: linear-gradient(165deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.92) 100%);
-  border-radius: 1.25rem;
-  border: 1px solid var(--color-border);
-  box-shadow: var(--color-shadow);
-  padding: clamp(1rem, 3vw, 2rem);
-}
-
-.calendar-panel {
-  display: block;
-}
-
-.calendar-rotation-header {
-  min-width: clamp(8rem, 16vw, 13rem);
-  padding: 0.75rem 1rem;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.2rem;
-  background: linear-gradient(145deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
-  border-right: 1px solid rgba(148, 163, 184, 0.35);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  box-shadow:
-    inset 0 0 0 1px rgba(148, 163, 184, 0.1),
-    0 18px 32px rgba(8, 25, 53, 0.35);
-}
-
-.calendar-rotation-header__subtitle {
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  font-weight: 600;
-  color: rgba(148, 163, 184, 0.7);
-}
-
-.calendar-rotation-header__title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #f8fafc;
-}
-
-.calendar-rotation-cell {
-  padding: 0.75rem 1rem;
-  background: rgba(15, 23, 42, 0.7);
-  color: #e2e8f0;
-  font-weight: 500;
-  font-size: 0.95rem;
-  line-height: 1.35;
-  vertical-align: top;
-  border-right: 1px solid rgba(30, 64, 175, 0.35);
-  border-bottom: 1px solid rgba(30, 64, 175, 0.2);
-  white-space: normal;
-  word-break: break-word;
+.best-swaps-panel__row,
+.all-swaps-panel__row,
+.swap-panel__row {
+  width: 100%;
+  display: grid;
+  /* Two equally-sized text columns that shrink evenly, plus a natural-size score column */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) min-content;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   position: relative;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 .calendar-rotation-cell--current {
@@ -827,7 +792,7 @@ body {
 }
 
 .all-swaps-panel__row {
-  grid-template-columns: var(--swap-date-column-width) minmax(0, 1fr) max-content;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) min-content;
 }
 
 .all-swaps-panel__cell--score {
@@ -849,6 +814,78 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   white-space: nowrap;
+}
+
+.debug-swaps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 0.9rem;
+  border: 1px dashed rgba(59, 130, 246, 0.35);
+  background: rgba(30, 41, 59, 0.55);
+}
+
+.debug-swaps__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.debug-swaps__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.debug-swaps__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.debug-swaps__item {
+  border-radius: 0.75rem;
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  background: rgba(15, 23, 42, 0.76);
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.debug-swaps__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) min-content;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+}
+
+.debug-swaps__col {
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.debug-swaps__col--resident {
+  font-weight: 600;
+  color: rgba(191, 219, 254, 0.92);
+}
+
+.debug-swaps__col--score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #facc15;
+}
+
+.debug-swaps__reason {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
 }
 
 .best-swaps-panel__header {
@@ -905,6 +942,7 @@ body {
 }
 
 .best-swaps-panel__filters,
+.swap-panel__filters,
 .best-swaps-panel__hint,
 .best-swaps-panel__loading,
 .best-swaps-panel__empty {
@@ -939,26 +977,10 @@ body {
   overflow: hidden;
 }
 
-.best-swaps-panel__row,
-.all-swaps-panel__row,
-.swap-panel__row {
-  width: 100%;
-  display: grid;
-  grid-template-columns: var(--swap-date-column-width) minmax(0, 1fr) max-content;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.8rem 1rem;
-  background: transparent;
-  border: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  position: relative;
-  transition:
-    background-color 120ms ease,
-    color 120ms ease;
-}
+/* duplicate block removed — single canonical definition near top of file */
+
+/* side-panel-specific flex overrides removed so the swap rows use the shared grid
+   and both text columns will shrink evenly. */
 
 .best-swaps-panel__row::after,
 .all-swaps-panel__row::after,
@@ -1025,6 +1047,79 @@ body {
   background-color: rgba(125, 211, 252, 0.92);
   padding: 0.15rem 0.55rem;
   border-radius: 9999px;
+}
+
+.swap-panel__debug-sections {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.swap-panel__debug {
+  border-radius: 0.75rem;
+  border: 1px dashed rgba(96, 165, 250, 0.45);
+  background: rgba(30, 41, 59, 0.5);
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.swap-panel__debug-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.swap-panel__debug-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.swap-panel__debug-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.72);
+  padding: 0.65rem 0.75rem;
+}
+
+.swap-panel__debug-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) min-content;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.swap-panel__debug-col {
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.swap-panel__debug-col--resident {
+  font-weight: 600;
+  color: rgba(191, 219, 254, 0.92);
+}
+
+.swap-panel__debug-col--score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #facc15;
+}
+
+.swap-panel__debug-reason {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
 }
 
 .best-swaps-panel__details,
@@ -1136,6 +1231,49 @@ body {
 .pressure-breakdown {
   display: grid;
   gap: 1rem;
+}
+
+.pressure-breakdown__filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.pressure-breakdown__filter-button {
+  appearance: none;
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  border-radius: 9999px;
+  padding: 0.25rem 0.8rem;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: rgba(30, 41, 59, 0.6);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.pressure-breakdown__filter-button:hover,
+.pressure-breakdown__filter-button:focus-visible {
+  background: rgba(59, 130, 246, 0.35);
+  color: #f8fafc;
+  border-color: rgba(59, 130, 246, 0.55);
+}
+
+.pressure-breakdown__filter-button:focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.6);
+  outline-offset: 2px;
+}
+
+.pressure-breakdown__filter-button--active {
+  background: rgba(56, 189, 248, 0.28);
+  color: #0f172a;
+  border-color: rgba(56, 189, 248, 0.65);
 }
 
 .best-swaps-panel__breakdown.pressure-breakdown,
@@ -1340,6 +1478,10 @@ body {
     align-self: stretch;
   }
 
+  /* Keep the swap rows as the shared three-column grid (two flexible columns + score)
+     allowing both text columns to shrink evenly until space runs out. Mobile stacking
+     still happens at the smaller breakpoints (<=768px). */
+
   .app__header-controls {
     flex-direction: column;
     align-items: stretch;
@@ -1400,9 +1542,14 @@ body {
   .best-swaps-panel__row,
   .all-swaps-panel__row,
   .swap-panel__row {
+    display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 0.5rem;
     padding-right: 2.5rem;
+  }
+
+  .side-panel .swap-panel__cell--score {
+    margin-left: 0;
   }
 
   .best-swaps-panel__row::after,
@@ -1415,6 +1562,19 @@ body {
   .all-swaps-panel__cell,
   .swap-panel__cell {
     font-size: 0.92rem;
+  }
+
+  .best-swaps-panel__cell--date,
+  .best-swaps-panel__cell--resident,
+  .best-swaps-panel__cell--score,
+  .all-swaps-panel__cell--date,
+  .all-swaps-panel__cell--resident,
+  .all-swaps-panel__cell--score,
+  .swap-panel__cell--date,
+  .swap-panel__cell--resident,
+  .swap-panel__cell--score {
+    grid-column: auto;
+    grid-row: auto;
   }
 
   .best-swaps-panel__cell:not(:first-child),

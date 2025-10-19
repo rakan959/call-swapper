@@ -1,17 +1,44 @@
 import dayjs from '@utils/dayjs';
 import { type ConfigType } from 'dayjs';
-import { Dataset, Shift, Context, SwapCandidate, RuleConfig, ShiftType } from '@domain/types';
+import {
+  Dataset,
+  Shift,
+  Context,
+  SwapCandidate,
+  RuleConfig,
+  ShiftType,
+  SwapPressureBreakdown,
+} from '@domain/types';
 import { explainSwap } from '@domain/rules';
 import type { SwapRejectionReason } from '@domain/rules';
 import { debugLog, withDebugGroup } from '@utils/debug';
 import { evaluatePairs } from './workerPool';
 import type { ShiftPair } from './workerProtocol';
 import { resolveShabbosObservers } from '@domain/shabbos';
+import { calculateSwapPressure } from '@domain/simipar';
 
 const DEFAULT_REST_HOURS_MIN = 8;
 
 export type SwapEngineOptions = {
   today?: ConfigType;
+  collectRejections?: boolean;
+};
+
+export type SwapRejectionCategory = 'general' | 'shabbos';
+
+export type SwapRejectionDetail = {
+  a: Shift;
+  b: Shift;
+  score: number;
+  pressure: SwapPressureBreakdown;
+  reason: SwapRejectionReason;
+  reasonLabel: string;
+  category: SwapRejectionCategory;
+};
+
+export type SwapSearchResult = {
+  accepted: SwapCandidate[];
+  rejected: SwapRejectionDetail[];
 };
 
 function resolveToday(options?: SwapEngineOptions) {
@@ -151,6 +178,162 @@ function describeReason(reason: SwapRejectionReason): unknown {
   }
 }
 
+function summarizeRejectionReason(reason: SwapRejectionReason): string {
+  switch (reason.kind) {
+    case 'rule-violation':
+      return `${reason.code}: ${reason.message}`;
+    case 'eligibility-a':
+    case 'eligibility-b':
+      return `Resident ${reason.residentId} is not eligible for ${reason.attemptedType}`;
+    case 'type-whitelist':
+      return `Shift types ${reason.shiftA.type} and ${reason.shiftB.type} are not whitelisted`;
+    case 'weekend-mismatch':
+      return `Weekend/holiday mismatch between ${reason.shiftA} and ${reason.shiftB}`;
+    case 'moses-tier-mismatch':
+      return `Moses tier mismatch (${reason.tierA} vs ${reason.tierB})`;
+    case 'same-resident':
+      return `Same resident (${reason.residentId}) cannot swap shifts ${reason.shiftA} and ${reason.shiftB}`;
+    case 'resident-missing':
+      return `Missing resident data for ${reason.residentA} or ${reason.residentB}`;
+    case 'missing-input':
+      return 'Missing shift data in evaluation';
+    case 'identical-shift':
+      return `Shift ${reason.shiftId} cannot swap with itself`;
+    case 'vacation-conflict':
+      return `Vacation conflict for resident ${reason.residentId}`;
+    case 'rotation-block':
+      return `Rotation block conflict (${reason.rotation})`;
+    case 'shabbos-restriction':
+      return `Shabbos restriction (${reason.restriction}) for resident ${reason.residentId}`;
+    case 'unexpected-error':
+      return `Unexpected error: ${reason.message}`;
+    default:
+      return 'Swap rejected for an unknown reason';
+  }
+}
+
+function makePairKey(a: Shift, b: Shift): string {
+  return `${a.id}::${b.id}`;
+}
+
+function collectRejectedSwaps(
+  pairs: ShiftPair[],
+  acceptedKeys: ReadonlySet<string>,
+  ctx: Context,
+): SwapRejectionDetail[] {
+  const rejected: SwapRejectionDetail[] = [];
+  for (const pair of pairs) {
+    const key = makePairKey(pair.a, pair.b);
+    if (acceptedKeys.has(key)) {
+      continue;
+    }
+    const evaluation = explainSwap(pair.a, pair.b, ctx);
+    if (evaluation.feasible) {
+      continue;
+    }
+    const pressure = calculateSwapPressure(pair.a, pair.b, ctx);
+    const category: SwapRejectionCategory =
+      evaluation.reason.kind === 'shabbos-restriction' ? 'shabbos' : 'general';
+    rejected.push({
+      a: pair.a,
+      b: pair.b,
+      score: pressure.score,
+      pressure,
+      reason: evaluation.reason,
+      reasonLabel: summarizeRejectionReason(evaluation.reason),
+      category,
+    });
+  }
+
+  rejected.sort((left, right) => right.score - left.score);
+  return rejected;
+}
+
+function buildSearchResult(
+  label: string,
+  pairs: ShiftPair[],
+  ctx: Context,
+  evaluated: SwapCandidate[],
+  collectRejections: boolean,
+  formatTopEntry: (candidate: SwapCandidate) => unknown,
+): SwapSearchResult {
+  evaluated.sort((x, y) => y.score - x.score);
+  if (evaluated.length === 0) {
+    const summary = summarizeRejections(pairs, ctx);
+    debugLog(`${label}:rejections`, summary);
+    logRejectionSummary(label, summary);
+  }
+
+  const rejected = collectRejections
+    ? collectRejectedSwaps(
+        pairs,
+        new Set(evaluated.map((candidate) => makePairKey(candidate.a, candidate.b))),
+        ctx,
+      )
+    : [];
+
+  debugLog(`${label}:results`, () => ({
+    feasible: evaluated.length,
+    top: evaluated.slice(0, 5).map(formatTopEntry),
+    rejected: rejected.length,
+  }));
+
+  return { accepted: evaluated, rejected };
+}
+
+function isShiftInPast(shift: Shift, today: dayjs.Dayjs): boolean {
+  return dayjs(shift.startISO).isBefore(today, 'day');
+}
+
+function isEligibleCounterpart(
+  target: Shift,
+  candidate: Shift,
+  residentId: string,
+  today: dayjs.Dayjs,
+): boolean {
+  if (candidate.residentId === residentId) {
+    return false;
+  }
+  if (candidate.type === 'BACKUP') {
+    return false;
+  }
+  if (target.type !== candidate.type) {
+    return false;
+  }
+  if (target.id === candidate.id) {
+    return false;
+  }
+  if (isShiftInPast(candidate, today)) {
+    return false;
+  }
+  return true;
+}
+
+function collectBestSwapPairs(
+  dataset: Dataset,
+  residentId: string,
+  today: dayjs.Dayjs,
+): { primary: Shift[]; pairs: ShiftPair[] } {
+  const primary = dataset.shifts.filter(
+    (shift) => shift.residentId === residentId && shift.type !== 'BACKUP',
+  );
+
+  const pairs: ShiftPair[] = [];
+  for (const target of primary) {
+    if (isShiftInPast(target, today)) {
+      continue;
+    }
+    for (const candidate of dataset.shifts) {
+      if (!isEligibleCounterpart(target, candidate, residentId, today)) {
+        continue;
+      }
+      pairs.push({ a: target, b: candidate });
+    }
+  }
+
+  return { primary, pairs };
+}
+
 function logRejectionSummary(label: string, summary: RejectionSummary): void {
   const topReasons = Object.entries(summary.rejectionReasons)
     .sort((a, b) => b[1] - a[1])
@@ -171,7 +354,7 @@ export async function findSwapsForShift(
   dataset: Dataset,
   target: Shift,
   options?: SwapEngineOptions,
-): Promise<SwapCandidate[]> {
+): Promise<SwapSearchResult> {
   return withDebugGroup(
     'findSwapsForShift',
     () => ({
@@ -191,7 +374,7 @@ export async function findSwapsForShift(
           shiftId: target.id,
           start: target.startISO,
         });
-        return [];
+        return { accepted: [], rejected: [] };
       }
       const ctx = buildContext(dataset);
       const candidates = dataset.shifts.filter(
@@ -204,20 +387,14 @@ export async function findSwapsForShift(
       const pairs: ShiftPair[] = candidates.map((b) => ({ a: target, b }));
       debugLog('findSwapsForShift:pairs', () => ({ count: pairs.length }));
       const evaluated = await evaluatePairs(pairs, ctx);
-      evaluated.sort((x, y) => y.score - x.score);
-      if (evaluated.length === 0) {
-        const summary = summarizeRejections(pairs, ctx);
-        debugLog('findSwapsForShift:rejections', summary);
-        logRejectionSummary('findSwapsForShift', summary);
-      }
-      debugLog('findSwapsForShift:results', () => ({
-        feasible: evaluated.length,
-        top: evaluated.slice(0, 5).map((candidate) => ({
-          partner: candidate.b.id,
-          score: candidate.score,
-        })),
-      }));
-      return evaluated;
+      return buildSearchResult(
+        'findSwapsForShift',
+        pairs,
+        ctx,
+        evaluated,
+        options?.collectRejections ?? false,
+        (candidate) => ({ partner: candidate.b.id, score: candidate.score }),
+      );
     },
   );
 }
@@ -226,7 +403,7 @@ export async function findBestSwaps(
   dataset: Dataset,
   residentId: string,
   options?: SwapEngineOptions,
-): Promise<SwapCandidate[]> {
+): Promise<SwapSearchResult> {
   return withDebugGroup(
     'findBestSwaps',
     () => ({
@@ -234,50 +411,27 @@ export async function findBestSwaps(
       todayOverride: options?.today,
     }),
     async () => {
-      const primaryShifts = dataset.shifts.filter(
-        (shift) => shift.residentId === residentId && shift.type !== 'BACKUP',
-      );
-      if (primaryShifts.length === 0) {
+      const today = resolveToday(options);
+      const { primary, pairs } = collectBestSwapPairs(dataset, residentId, today);
+      if (primary.length === 0) {
         debugLog('findBestSwaps:no-primary-shifts', { residentId });
-        return [];
+        return { accepted: [], rejected: [] };
       }
 
       const ctx = buildContext(dataset);
-      const pairs: ShiftPair[] = [];
-      const today = resolveToday(options);
-      for (const a of primaryShifts) {
-        if (dayjs(a.startISO).isBefore(today, 'day')) {
-          continue;
-        }
-        for (const b of dataset.shifts) {
-          if (b.residentId === residentId) continue;
-          if (b.type === 'BACKUP') continue;
-          if (a.type !== b.type) continue;
-          if (a.id === b.id) continue;
-          if (dayjs(b.startISO).isBefore(today, 'day')) continue;
-          pairs.push({ a, b });
-        }
-      }
       debugLog('findBestSwaps:pairs', {
         count: pairs.length,
-        primaryShiftCount: primaryShifts.length,
+        primaryShiftCount: primary.length,
       });
       const evaluated = await evaluatePairs(pairs, ctx);
-      evaluated.sort((x, y) => y.score - x.score);
-      if (evaluated.length === 0) {
-        const summary = summarizeRejections(pairs, ctx);
-        debugLog('findBestSwaps:rejections', summary);
-        logRejectionSummary('findBestSwaps', summary);
-      }
-      debugLog('findBestSwaps:results', () => ({
-        feasible: evaluated.length,
-        top: evaluated.slice(0, 5).map((candidate) => ({
-          a: candidate.a.id,
-          b: candidate.b.id,
-          score: candidate.score,
-        })),
-      }));
-      return evaluated;
+      return buildSearchResult(
+        'findBestSwaps',
+        pairs,
+        ctx,
+        evaluated,
+        options?.collectRejections ?? false,
+        (candidate) => ({ a: candidate.a.id, b: candidate.b.id, score: candidate.score }),
+      );
     },
   );
 }

@@ -68,7 +68,7 @@ describe('swapEngine', () => {
     };
 
     const target = dataset.shifts[0]!;
-    const swaps = await findSwapsForShift(dataset, target, {
+    const { accepted: swaps } = await findSwapsForShift(dataset, target, {
       today: '2024-12-31T12:00:00Z',
     });
 
@@ -136,7 +136,7 @@ describe('swapEngine', () => {
     expect(target).toBeDefined();
     if (!target) return;
 
-    const swaps = await findSwapsForShift(dataset, target, {
+    const { accepted: swaps } = await findSwapsForShift(dataset, target, {
       today: '2024-12-31T12:00:00Z',
     });
     expect(swaps.length).toBeGreaterThan(0);
@@ -199,7 +199,7 @@ describe('swapEngine', () => {
     expect(target).toBeDefined();
     if (!target) return;
 
-    const swaps = await findSwapsForShift(dataset, target, {
+    const { accepted: swaps } = await findSwapsForShift(dataset, target, {
       today: '2025-01-31T12:00:00Z',
     });
     const swapIds = swaps.map((candidate) => candidate.b.id);
@@ -217,7 +217,7 @@ describe('swapEngine', () => {
     expect(target).toBeDefined();
     if (!target) return;
 
-    const swaps = await findSwapsForShift(dataset, target, {
+    const { accepted: swaps } = await findSwapsForShift(dataset, target, {
       today: '2024-09-30T12:00:00Z',
     });
     expect(swaps.length).toBeGreaterThan(0);
@@ -277,7 +277,7 @@ describe('swapEngine', () => {
     expect(target).toBeDefined();
     if (!target) return;
 
-    const swaps = await findSwapsForShift(dataset, target, {
+    const { accepted: swaps } = await findSwapsForShift(dataset, target, {
       today: '2025-01-01T00:00:00Z',
     });
     const partnerIds = swaps.map((swap) => swap.b.id);
@@ -325,7 +325,7 @@ describe('swapEngine', () => {
     expect(target).toBeDefined();
     if (!target) return;
 
-    const swaps = await findSwapsForShift(dataset, target, {
+    const { accepted: swaps } = await findSwapsForShift(dataset, target, {
       today: '2024-12-31T00:00:00Z',
     });
     expect(swaps).toHaveLength(0);
@@ -354,11 +354,12 @@ describe('swapEngine', () => {
       ],
     };
 
-    const swaps = await findBestSwaps(dataset, 'R1', {
+    const result = await findBestSwaps(dataset, 'R1', {
       today: '2025-01-01T00:00:00Z',
     });
 
-    expect(swaps).toEqual([]);
+    expect(result.accepted).toEqual([]);
+    expect(result.rejected).toEqual([]);
   });
 
   it('ignores backup shifts when finding best swaps', async () => {
@@ -428,11 +429,12 @@ describe('swapEngine', () => {
       return [];
     });
 
-    const swaps = await findBestSwaps(dataset, 'R1', {
+    const result = await findBestSwaps(dataset, 'R1', {
       today: '2025-03-01T00:00:00Z',
     });
 
-    expect(swaps).toEqual([]);
+    expect(result.accepted).toEqual([]);
+    expect(result.rejected).toEqual([]);
     expect(evaluateSpy).toHaveBeenCalledTimes(1);
     const [pairs] = capturedPairs;
     expect(pairs).toBeDefined();
@@ -626,11 +628,12 @@ describe('swapEngine', () => {
 
     const debugSpy = vi.spyOn(debug, 'debugLog').mockImplementation(() => {});
 
-    const swaps = await findBestSwaps(schedule, 'R1', {
+    const result = await findBestSwaps(schedule, 'R1', {
       today: '2025-02-01T00:00:00Z',
     });
 
-    expect(swaps).toEqual([]);
+    expect(result.accepted).toEqual([]);
+    expect(result.rejected).toEqual([]);
     expect(evaluateSpy).toHaveBeenCalled();
     expect(debugSpy).toHaveBeenCalledWith(
       'findBestSwaps:rejections',
