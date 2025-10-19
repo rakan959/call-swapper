@@ -3,10 +3,11 @@
  * @req: F-005
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within, act } from '@testing-library/react';
 import App from '../../src/App';
+import React from 'react';
 import { Dataset, Shift, SwapCandidate, SwapPressureBreakdown } from '../../src/domain/types';
+import { SwapRejectionDetail, SwapSearchResult } from '../../src/engine/swapEngine';
 import { isWeekendOrHoliday } from '../../src/domain/calendar';
 
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
@@ -42,7 +43,7 @@ type CalendarStubInstance = {
   view: { type: string };
 };
 
-const calendarInstances = vi.hoisted(() => [] as CalendarStubInstance[]) as CalendarStubInstance[];
+const calendarInstances = vi.hoisted(() => [] as CalendarStubInstance[]);
 
 const parseCsvToDatasetMock = vi.hoisted(() => vi.fn());
 
@@ -106,6 +107,22 @@ vi.mock('@engine/swapEngine', () => ({
   findSwapsForShift: findSwapsForShiftMock,
   findBestSwaps: findBestSwapsMock,
 }));
+
+const showDebugSettings = async (): Promise<void> => {
+  await waitFor(() => {
+    const runtimeWindow = window as typeof window & {
+      swapFinderDebug?: { showDebugMenu: () => void };
+    };
+    expect(runtimeWindow.swapFinderDebug).toBeTruthy();
+  });
+
+  act(() => {
+    const runtimeWindow = window as typeof window & {
+      swapFinderDebug?: { showDebugMenu: () => void };
+    };
+    runtimeWindow.swapFinderDebug?.showDebugMenu();
+  });
+};
 
 const CSV = `Shift ID,Resident,Resident ID,Start,End,Type,Location
 S1,Alice Rivers,R1,2026-10-01T08:00:00Z,2026-10-01T20:00:00Z,MOSES,Main
@@ -315,16 +332,20 @@ function buildPressure(
   };
 }
 
-function buildCandidates(scores: [Shift, number][]): SwapCandidate[] {
-  return scores.map(([shift, rawScore]) => {
+function buildSwapResultFromScores(
+  scores: [Shift, number][],
+  rejected: SwapRejectionDetail[] = [],
+): SwapSearchResult {
+  const accepted = scores.map(([shift, rawScore]) => {
     const pressure = buildPressure(rawScore, TARGET_SHIFT, shift);
     return {
       a: TARGET_SHIFT,
       b: shift,
       score: pressure.score,
       pressure,
-    };
+    } satisfies SwapCandidate;
   });
+  return { accepted, rejected } satisfies SwapSearchResult;
 }
 
 function createSwapCandidate(
@@ -363,6 +384,31 @@ function createSwapCandidate(
     b: shift,
     score: totalScore,
     pressure,
+  };
+}
+
+function buildBestSwapResult(
+  candidates: SwapCandidate[],
+  rejected: SwapRejectionDetail[] = [],
+): SwapSearchResult {
+  return { accepted: candidates, rejected };
+}
+
+function createRejectionDetail(
+  shift: Shift,
+  totalScore: number,
+  reasonLabel: string,
+  category: SwapRejectionDetail['category'] = 'general',
+): SwapRejectionDetail {
+  const candidate = createSwapCandidate(shift, totalScore / 2, totalScore / 2, totalScore);
+  return {
+    a: candidate.a,
+    b: candidate.b,
+    score: candidate.score,
+    pressure: candidate.pressure,
+    reason: { kind: 'missing-input', shiftA: candidate.a.id, shiftB: candidate.b.id },
+    reasonLabel,
+    category,
   };
 }
 
@@ -470,7 +516,7 @@ describe('App side panel selection', () => {
   /** @req: F-006 */
   it('lists swap candidates when requesting swaps for a shift', async () => {
     findSwapsForShiftMock.mockImplementation(async () =>
-      buildCandidates([
+      buildSwapResultFromScores([
         [CANDIDATE_R2, 0.62],
         [CANDIDATE_NIGHT_FLOAT, 0.87],
       ]),
@@ -533,7 +579,7 @@ describe('App side panel selection', () => {
   /** @req: F-008 */
   it('supports sorting the swap candidate list', async () => {
     findSwapsForShiftMock.mockImplementation(async () =>
-      buildCandidates([
+      buildSwapResultFromScores([
         [CANDIDATE_R2, 0.62],
         [CANDIDATE_NIGHT_FLOAT, 0.87],
         [CANDIDATE_IP_CONSULT, 0.62],
@@ -623,26 +669,126 @@ describe('App side panel selection', () => {
     });
   });
 
+  it('filters swap candidates by resident selection', async () => {
+    findSwapsForShiftMock.mockResolvedValue(
+      buildSwapResultFromScores([
+        [CANDIDATE_R2, 0.82],
+        [CANDIDATE_IP_CONSULT, 0.71],
+      ]),
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
+    });
+
+    const residentSelect = screen.getByLabelText('Filter by resident');
+    fireEvent.change(residentSelect, { target: { value: '' } });
+
+    const calendar = calendarInstances[0];
+    act(() => {
+      calendar?.options.eventClick?.({ event: { id: 'S1' } });
+    });
+
+    const swapSection = await screen.findByRole('region', { name: /swap finder/i });
+    const action = within(swapSection).getByRole('button', { name: /find swaps/i });
+    fireEvent.click(action);
+
+    const list = await within(swapSection).findByRole('list', { name: /swap suggestions/i });
+
+    const residentFilterSelect = within(swapSection).getByLabelText('Calls by resident');
+    expect((residentFilterSelect as HTMLSelectElement).value).toBe('R1');
+
+    const optionLabels = within(residentFilterSelect)
+      .getAllByRole('option')
+      .map((option) => option.textContent ?? '');
+    expect(optionLabels).toEqual(['Alice Rivers', 'Bob Stone', 'Carol Evans']);
+
+    await waitFor(() => {
+      const items = within(list).getAllByRole('listitem');
+      expect(items).toHaveLength(2);
+    });
+
+    fireEvent.change(residentFilterSelect, { target: { value: 'R2' } });
+
+    await waitFor(() => {
+      const items = within(list).getAllByRole('listitem');
+      expect(items).toHaveLength(1);
+      expect(within(items[0]!).getByText(/Bob Stone/)).toBeTruthy();
+    });
+
+    fireEvent.change(residentFilterSelect, { target: { value: 'R1' } });
+
+    await waitFor(() => {
+      const items = within(list).getAllByRole('listitem');
+      expect(items).toHaveLength(2);
+    });
+  });
+
+  it('announces hidden call counts for negative score filters', async () => {
+    const residentNegativeCandidate = createSwapCandidate(CANDIDATE_R2, -2, 3, 1);
+    const totalNegativeCandidate = createSwapCandidate(CANDIDATE_IP_CONSULT, 2, 1, -1);
+
+    findSwapsForShiftMock.mockResolvedValue({
+      accepted: [residentNegativeCandidate, totalNegativeCandidate],
+      rejected: [],
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
+    });
+
+    const calendar = calendarInstances[0];
+    act(() => {
+      calendar?.options.eventClick?.({ event: { id: 'S1' } });
+    });
+
+    const swapSection = await screen.findByRole('region', { name: /swap finder/i });
+    const action = within(swapSection).getByRole('button', { name: /find swaps/i });
+    fireEvent.click(action);
+
+    await waitFor(() => {
+      expect(findSwapsForShiftMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(
+      await within(swapSection).findByText('1 call hidden because of negative resident score.'),
+    ).toBeTruthy();
+    expect(
+      await within(swapSection).findByText('1 call hidden because of negative combined score.'),
+    ).toBeTruthy();
+
+    const emptyMessage = await within(swapSection).findByText(
+      /No swaps are available for this shift/i,
+    );
+    expect(emptyMessage).toBeTruthy();
+  });
+
   /** @req: F-009 */
   it('runs the best swaps search and renders ranked results', async () => {
     const firstPressure = buildPressure(0.93, TARGET_SHIFT, CANDIDATE_R2);
     const secondPressure = buildPressure(0.74, TARGET_SHIFT, CANDIDATE_IP_CONSULT);
 
-    findBestSwapsMock.mockResolvedValue([
-      {
-        a: TARGET_SHIFT,
-        b: CANDIDATE_R2,
-        score: firstPressure.score,
-        pressure: firstPressure,
-        reasons: ['Balances Moses coverage', 'Improves rest window for Alice'],
-      },
-      {
-        a: TARGET_SHIFT,
-        b: CANDIDATE_IP_CONSULT,
-        score: secondPressure.score,
-        pressure: secondPressure,
-      },
-    ]);
+    findBestSwapsMock.mockResolvedValue(
+      buildBestSwapResult([
+        {
+          a: TARGET_SHIFT,
+          b: CANDIDATE_R2,
+          score: firstPressure.score,
+          pressure: firstPressure,
+          reasons: ['Balances Moses coverage', 'Improves rest window for Alice'],
+        },
+        {
+          a: TARGET_SHIFT,
+          b: CANDIDATE_IP_CONSULT,
+          score: secondPressure.score,
+          pressure: secondPressure,
+        },
+      ]),
+    );
 
     render(<App />);
 
@@ -695,14 +841,19 @@ describe('App side panel selection', () => {
       defaultSortDirection: 'asc',
       hideNegativeResident: false,
       hideNegativeTotal: false,
+      showRejectedSwaps: false,
+      showShabbosRejectedSwaps: false,
+      showResidentCallFilter: false,
     } as const;
     document.cookie = `swapSettings=${encodeURIComponent(JSON.stringify(savedSettings))}`;
 
-    findBestSwapsMock.mockResolvedValue([
-      createSwapCandidate(CANDIDATE_R2, 4, 2),
-      createSwapCandidate(CANDIDATE_IP_CONSULT, 8, 4),
-      createSwapCandidate(CANDIDATE_NIGHT_FLOAT, 10, 8),
-    ]);
+    findBestSwapsMock.mockResolvedValue(
+      buildBestSwapResult([
+        createSwapCandidate(CANDIDATE_R2, 4, 2),
+        createSwapCandidate(CANDIDATE_IP_CONSULT, 8, 4),
+        createSwapCandidate(CANDIDATE_NIGHT_FLOAT, 10, 8),
+      ]),
+    );
 
     render(<App />);
 
@@ -739,6 +890,8 @@ describe('App side panel selection', () => {
     const settingsToggle = screen.getByRole('button', { name: 'Settings' });
     fireEvent.click(settingsToggle);
 
+    await showDebugSettings();
+
     const sortSelect = screen.getByLabelText<HTMLSelectElement>('Default sort');
     expect(sortSelect.value).toBe('average');
 
@@ -751,16 +904,26 @@ describe('App side panel selection', () => {
     const hideTotalCheckbox = screen.getByLabelText<HTMLInputElement>(
       'Hide swaps when the combined score is negative',
     );
+    const showRejectedCheckbox = screen.getByLabelText<HTMLInputElement>(
+      'Show rejected swaps with score preview',
+    );
+    const showShabbosCheckbox = screen.getByLabelText<HTMLInputElement>(
+      'Highlight rejected Shabbos swaps',
+    );
 
     expect(hideResidentCheckbox.checked).toBe(false);
     expect(hideTotalCheckbox.checked).toBe(false);
+    expect(showRejectedCheckbox.checked).toBe(false);
+    expect(showShabbosCheckbox.checked).toBe(false);
   });
 
   it('reveals filtered swaps and persists updated all swaps settings', async () => {
-    findBestSwapsMock.mockResolvedValue([
-      createSwapCandidate(CANDIDATE_R2, 6, 6),
-      createSwapCandidate(CANDIDATE_IP_CONSULT, -4, 9, 5),
-    ]);
+    findBestSwapsMock.mockResolvedValue(
+      buildBestSwapResult([
+        createSwapCandidate(CANDIDATE_R2, 6, 6),
+        createSwapCandidate(CANDIDATE_IP_CONSULT, -4, 9, 5),
+      ]),
+    );
 
     render(<App />);
 
@@ -812,14 +975,185 @@ describe('App side panel selection', () => {
       const parsed = JSON.parse(decodeURIComponent(cookieValue));
       expect(parsed.hideNegativeResident).toBe(false);
       expect(parsed.hideNegativeTotal).toBe(true);
+      expect(parsed.showRejectedSwaps).toBe(false);
+      expect(parsed.showShabbosRejectedSwaps).toBe(false);
+      expect(parsed).not.toHaveProperty('showResidentCallFilter');
     });
   });
 
+  it('ignores legacy resident toggle settings stored in cookies', async () => {
+    const legacySettings = {
+      defaultSortKey: 'score',
+      defaultSortDirection: 'desc',
+      hideNegativeResident: true,
+      hideNegativeTotal: true,
+      showRejectedSwaps: false,
+      showShabbosRejectedSwaps: false,
+      showResidentCallFilter: true,
+    } as const;
+    document.cookie = `swapSettings=${encodeURIComponent(JSON.stringify(legacySettings))}`;
+
+    findBestSwapsMock.mockResolvedValue(
+      buildBestSwapResult([createSwapCandidate(CANDIDATE_R2, 6, 4)]),
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
+    });
+
+    const settingsToggle = screen.getByRole('button', { name: 'Settings' });
+    fireEvent.click(settingsToggle);
+
+    const hideResidentCheckbox = screen.getByLabelText<HTMLInputElement>(
+      'Hide swaps when any resident score is negative',
+    );
+    const hideTotalCheckbox = screen.getByLabelText<HTMLInputElement>(
+      'Hide swaps when the combined score is negative',
+    );
+
+    expect(hideResidentCheckbox.checked).toBe(true);
+    expect(hideTotalCheckbox.checked).toBe(true);
+
+    await waitFor(() => {
+      const cookieEntry = document.cookie
+        .split('; ')
+        .find((entry) => entry.startsWith('swapSettings='));
+      expect(cookieEntry).toBeTruthy();
+      const cookieValue = cookieEntry?.slice('swapSettings='.length) ?? '';
+      const parsed = JSON.parse(decodeURIComponent(cookieValue));
+      expect(parsed).not.toHaveProperty('showResidentCallFilter');
+    });
+  });
+
+  it('shows rejected swap diagnostics when debug toggles are enabled', async () => {
+    const mosesFilteredCandidate = createSwapCandidate(CANDIDATE_IP_CONSULT, 4, 4, 8);
+    const weekendFilteredCandidate = createSwapCandidate(CANDIDATE_R2, 3, 3, 6);
+
+    findBestSwapsMock.mockResolvedValue(
+      buildBestSwapResult(
+        [createSwapCandidate(CANDIDATE_R2, 6, 6)],
+        [
+          createRejectionDetail(CANDIDATE_IP_CONSULT, 8, 'Eligibility mismatch for Carol'),
+          {
+            a: weekendFilteredCandidate.a,
+            b: weekendFilteredCandidate.b,
+            score: weekendFilteredCandidate.score,
+            pressure: weekendFilteredCandidate.pressure,
+            reason: {
+              kind: 'weekend-mismatch',
+              shiftA: weekendFilteredCandidate.a.id,
+              shiftB: weekendFilteredCandidate.b.id,
+              weekendOrHolidayA: true,
+              weekendOrHolidayB: false,
+            },
+            reasonLabel: 'Weekend/holiday mismatch should be hidden',
+            category: 'general',
+          },
+          {
+            a: mosesFilteredCandidate.a,
+            b: mosesFilteredCandidate.b,
+            score: mosesFilteredCandidate.score,
+            pressure: mosesFilteredCandidate.pressure,
+            reason: {
+              kind: 'moses-tier-mismatch',
+              shiftA: mosesFilteredCandidate.a.id,
+              shiftB: mosesFilteredCandidate.b.id,
+              tierA: 'junior',
+              tierB: 'senior',
+            },
+            reasonLabel: 'Moses tier mismatch should be hidden',
+            category: 'general',
+          },
+          createRejectionDetail(CANDIDATE_NIGHT_FLOAT, 10, 'Shabbos conflict for Diana', 'shabbos'),
+        ],
+      ),
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
+    });
+
+    const residentSelect = screen.getByLabelText('Filter by resident');
+    fireEvent.change(residentSelect, { target: { value: 'R1' } });
+
+    const bestSwapsButton = await screen.findByRole('button', { name: /find best swaps/i });
+    await waitFor(() => {
+      expect(bestSwapsButton.hasAttribute('disabled')).toBe(false);
+    });
+    fireEvent.click(bestSwapsButton);
+
+    await waitFor(() => {
+      expect(findBestSwapsMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(screen.queryByText('Rejected swaps (debug)')).toBeNull();
+    expect(screen.queryByText('Rejected Shabbos swaps (debug)')).toBeNull();
+
+    const settingsToggle = screen.getByRole('button', { name: 'Settings' });
+    fireEvent.click(settingsToggle);
+
+    await showDebugSettings();
+
+    const showRejectedCheckbox = screen.getByLabelText<HTMLInputElement>(
+      'Show rejected swaps with score preview',
+    );
+    const showShabbosCheckbox = screen.getByLabelText<HTMLInputElement>(
+      'Highlight rejected Shabbos swaps',
+    );
+    fireEvent.click(showRejectedCheckbox);
+    fireEvent.click(showShabbosCheckbox);
+
+    fireEvent.click(settingsToggle);
+
+    const generalHeading = await screen.findByRole('heading', {
+      name: 'Rejected swaps (debug)',
+    });
+    const shabbosHeading = await screen.findByRole('heading', {
+      name: 'Rejected Shabbos swaps (debug)',
+    });
+
+    const generalSection = generalHeading.closest('section');
+    const shabbosSection = shabbosHeading.closest('section');
+    expect(generalSection).toBeTruthy();
+    expect(shabbosSection).toBeTruthy();
+
+    if (generalSection) {
+      const scoped = within(generalSection);
+      expect(scoped.getByText('Eligibility mismatch for Carol')).toBeTruthy();
+      expect(scoped.getByText('+8.00')).toBeTruthy();
+      expect(scoped.queryByText('Weekend/holiday mismatch should be hidden')).toBeNull();
+      expect(scoped.queryByText('Moses tier mismatch should be hidden')).toBeNull();
+    }
+
+    if (shabbosSection) {
+      const scoped = within(shabbosSection);
+      expect(scoped.getByText('Shabbos conflict for Diana')).toBeTruthy();
+      expect(scoped.getByText('+10.00')).toBeTruthy();
+    }
+
+    const topSwapList = await screen.findByRole('list', { name: /top 10 swap suggestions/i });
+    const topSwapItems = within(topSwapList)
+      .getAllByRole('listitem')
+      .filter((item) => item.parentElement === topSwapList);
+    const firstSwapItem = topSwapItems[0];
+    expect(firstSwapItem).toBeTruthy();
+    const firstSwapToggle = firstSwapItem && within(firstSwapItem).getByRole('button');
+    if (firstSwapToggle) {
+      fireEvent.click(firstSwapToggle);
+    }
+  });
+
   it('filters best swap suggestions when resident scores are negative', async () => {
-    findBestSwapsMock.mockResolvedValue([
-      createSwapCandidate(CANDIDATE_R2, 5, 6),
-      createSwapCandidate(CANDIDATE_IP_CONSULT, -3, 7, 4),
-    ]);
+    findBestSwapsMock.mockResolvedValue(
+      buildBestSwapResult([
+        createSwapCandidate(CANDIDATE_R2, 5, 6),
+        createSwapCandidate(CANDIDATE_IP_CONSULT, -3, 7, 4),
+      ]),
+    );
 
     render(<App />);
 
@@ -883,10 +1217,12 @@ describe('App side panel selection', () => {
   });
 
   it('omits backup swaps from the all swaps list', async () => {
-    findBestSwapsMock.mockResolvedValue([
-      createSwapCandidate(CANDIDATE_R2, 6, 6),
-      createSwapCandidate(CANDIDATE_BACKUP, 5, 5, 10),
-    ]);
+    findBestSwapsMock.mockResolvedValue(
+      buildBestSwapResult([
+        createSwapCandidate(CANDIDATE_R2, 6, 6),
+        createSwapCandidate(CANDIDATE_BACKUP, 5, 5, 10),
+      ]),
+    );
 
     render(<App />);
 
@@ -924,10 +1260,12 @@ describe('App side panel selection', () => {
   });
 
   it('shows an empty state when best swap filters hide all suggestions', async () => {
-    findBestSwapsMock.mockResolvedValue([
-      createSwapCandidate(CANDIDATE_IP_CONSULT, -2, 8, 6),
-      createSwapCandidate(CANDIDATE_NIGHT_FLOAT, 4, 5, -3),
-    ]);
+    findBestSwapsMock.mockResolvedValue(
+      buildBestSwapResult([
+        createSwapCandidate(CANDIDATE_IP_CONSULT, -2, 8, 6),
+        createSwapCandidate(CANDIDATE_NIGHT_FLOAT, 4, 5, -3),
+      ]),
+    );
 
     render(<App />);
 

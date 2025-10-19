@@ -3,7 +3,7 @@ import type { JSX } from 'react';
 import dayjs from '@utils/dayjs';
 import { Dataset, Resident, Shift, ShiftType, SwapCandidate } from '@domain/types';
 import { SwapSettings } from '@domain/swapSettings';
-import { findSwapsForShift } from '@engine/swapEngine';
+import { findSwapsForShift, SwapRejectionDetail, SwapSearchResult } from '@engine/swapEngine';
 import { findRotationForDate } from '@utils/rotations';
 import { formatScore } from '@utils/score';
 import {
@@ -13,6 +13,7 @@ import {
   SwapSortKey,
 } from '@domain/swapSort';
 import { filterCandidatesBySettings } from '@utils/swapFilters';
+import { getCounterpartScore, getMyScore, getTotalScore } from '@utils/swapMetrics';
 import PressureBreakdown from './PressureBreakdown';
 
 export type ShiftPalette = {
@@ -86,10 +87,11 @@ function formatRotationValue(value: string | null): string {
 function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionProps): JSX.Element {
   const [loadState, setLoadState] = useState<SwapLoadState>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [candidates, setCandidates] = useState<SwapCandidate[]>([]);
+  const [searchResult, setSearchResult] = useState<SwapSearchResult | null>(null);
   const [sortKey, setSortKey] = useState<SwapSortKey>('score');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(defaultSortDirection('score'));
   const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(null);
+  const [residentFilter, setResidentFilter] = useState<string>(shift.residentId);
   const requestTokenRef = useRef(0);
 
   const residentsById = useMemo(() => new Map(dataset.residents.map((r) => [r.id, r])), [dataset]);
@@ -116,20 +118,49 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
     requestTokenRef.current += 1;
     setLoadState('idle');
     setError(null);
-    setCandidates([]);
+    setSearchResult(null);
     setSortKey('score');
     setSortDirection(defaultSortDirection('score'));
     setExpandedCandidateId(null);
+    setResidentFilter(shift.residentId);
   }, [dataset, shift.id]);
 
+  const acceptedCandidates = searchResult?.accepted ?? [];
+  const hiddenByResidentCount = useMemo(() => {
+    if (!swapSettings.hideNegativeResident) {
+      return 0;
+    }
+    return acceptedCandidates.reduce((count, candidate) => {
+      const myScore = getMyScore(candidate);
+      const counterpartScore = getCounterpartScore(candidate);
+      return myScore < 0 || counterpartScore < 0 ? count + 1 : count;
+    }, 0);
+  }, [acceptedCandidates, swapSettings.hideNegativeResident]);
+
+  const hiddenByTotalCount = useMemo(() => {
+    if (!swapSettings.hideNegativeTotal) {
+      return 0;
+    }
+    return acceptedCandidates.reduce(
+      (count, candidate) => (getTotalScore(candidate) < 0 ? count + 1 : count),
+      0,
+    );
+  }, [acceptedCandidates, swapSettings.hideNegativeTotal]);
+
+  const rejectedCandidates = useMemo(() => {
+    return (searchResult?.rejected ?? []).filter(
+      (entry) => !['moses-tier-mismatch', 'weekend-mismatch'].includes(entry.reason.kind),
+    );
+  }, [searchResult?.rejected]);
+
   const filteredCandidates = useMemo(() => {
-    return filterCandidatesBySettings(candidates, {
+    return filterCandidatesBySettings(acceptedCandidates, {
       hideNegativeResident: swapSettings.hideNegativeResident,
       hideNegativeTotal: swapSettings.hideNegativeTotal,
     });
-  }, [candidates, swapSettings.hideNegativeResident, swapSettings.hideNegativeTotal]);
+  }, [acceptedCandidates, swapSettings.hideNegativeResident, swapSettings.hideNegativeTotal]);
 
-  const visibleCandidates = useMemo(() => {
+  const sortedCandidates = useMemo(() => {
     const today = dayjs().startOf('day');
     const upcoming = filteredCandidates.filter((candidate) => {
       const targetStart = dayjs(candidate.a.startISO);
@@ -153,17 +184,67 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
     return [...upcoming].sort(comparator);
   }, [filteredCandidates, sortDirection, sortKey]);
 
+  const callsByResidentOptions = useMemo(() => {
+    const ownerName = residentsById.get(shift.residentId)?.name ?? shift.residentId;
+    const counterparts = new Map<string, string>();
+    sortedCandidates.forEach((candidate) => {
+      const counterpartId = candidate.b.residentId;
+      if (counterpartId === shift.residentId) {
+        return;
+      }
+      if (!counterparts.has(counterpartId)) {
+        const counterpartName = residentsById.get(counterpartId)?.name ?? counterpartId;
+        counterparts.set(counterpartId, counterpartName);
+      }
+    });
+
+    const counterpartOptions = Array.from(counterparts.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+    return [{ id: shift.residentId, name: ownerName }, ...counterpartOptions];
+  }, [residentsById, shift.residentId, sortedCandidates]);
+
+  useEffect(() => {
+    if (callsByResidentOptions.some((option) => option.id === residentFilter)) {
+      return;
+    }
+    setResidentFilter(shift.residentId);
+  }, [callsByResidentOptions, residentFilter, shift.residentId]);
+
+  const visibleCandidates = useMemo(() => {
+    if (residentFilter === shift.residentId) {
+      return sortedCandidates;
+    }
+    return sortedCandidates.filter((candidate) => candidate.b.residentId === residentFilter);
+  }, [sortedCandidates, residentFilter, shift.residentId]);
+
+  useEffect(() => {
+    if (!expandedCandidateId) {
+      return;
+    }
+    const stillVisible = visibleCandidates.some((candidate) => {
+      const swapKey = `${candidate.a.id}-${candidate.b.id}`;
+      return swapKey === expandedCandidateId;
+    });
+    if (!stillVisible) {
+      setExpandedCandidateId(null);
+    }
+  }, [expandedCandidateId, visibleCandidates]);
+
+  const residentFocusValue = residentFilter === shift.residentId ? 'all' : residentFilter;
+
   const handleFindSwaps = async () => {
     const token = requestTokenRef.current + 1;
     requestTokenRef.current = token;
     setLoadState('loading');
     setError(null);
     try {
-      const results = await findSwapsForShift(dataset, shift);
+      const results = await findSwapsForShift(dataset, shift, { collectRejections: true });
       if (requestTokenRef.current !== token) {
         return;
       }
-      setCandidates(results);
+      setSearchResult(results);
       setExpandedCandidateId(null);
       setLoadState('ready');
     } catch (err) {
@@ -195,6 +276,49 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
 
   const toggleCandidate = (candidateId: string) => {
     setExpandedCandidateId((previous) => (previous === candidateId ? null : candidateId));
+  };
+
+  const rejectedGeneral = useMemo(() => {
+    return rejectedCandidates.filter((entry) => entry.category === 'general');
+  }, [rejectedCandidates]);
+
+  const rejectedShabbos = useMemo(() => {
+    return rejectedCandidates.filter((entry) => entry.category === 'shabbos');
+  }, [rejectedCandidates]);
+
+  const shouldShowGeneral = swapSettings.showRejectedSwaps && rejectedGeneral.length > 0;
+  const shouldShowShabbos = swapSettings.showShabbosRejectedSwaps && rejectedShabbos.length > 0;
+
+  const renderRejectedSection = (label: string, items: SwapRejectionDetail[]) => {
+    return (
+      <section className="swap-panel__debug" aria-label={label}>
+        <h4 className="swap-panel__debug-title">{label}</h4>
+        <ul className="swap-panel__debug-list">
+          {items.map((entry) => {
+            const counterpartResident = residentsById.get(entry.b.residentId);
+            const counterpartName = counterpartResident?.name ?? entry.b.residentId;
+            const swapDate = formatSwapDate(entry.b);
+            const scoreLabel = formatScore(entry.score);
+            return (
+              <li key={`rejected-${entry.a.id}-${entry.b.id}`} className="swap-panel__debug-item">
+                <div className="swap-panel__debug-row">
+                  <span className="swap-panel__debug-col swap-panel__debug-col--date">
+                    {swapDate}
+                  </span>
+                  <span className="swap-panel__debug-col swap-panel__debug-col--resident">
+                    {counterpartName}
+                  </span>
+                  <span className="swap-panel__debug-col swap-panel__debug-col--score">
+                    {scoreLabel}
+                  </span>
+                </div>
+                <p className="swap-panel__debug-reason">{entry.reasonLabel}</p>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    );
   };
 
   return (
@@ -255,7 +379,37 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
                 {sortDirectionText}
               </button>
             </div>
+            <div className="swap-panel__control">
+              <label htmlFor="swap-resident-filter">Calls by resident</label>
+              <select
+                id="swap-resident-filter"
+                value={residentFilter}
+                onChange={(event) => setResidentFilter(event.target.value)}
+              >
+                {callsByResidentOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+
+          {swapSettings.hideNegativeResident && hiddenByResidentCount > 0 && (
+            <p className="swap-panel__filters">
+              {hiddenByResidentCount === 1
+                ? '1 call hidden because of negative resident score.'
+                : `${hiddenByResidentCount} calls hidden because of negative resident score.`}
+            </p>
+          )}
+
+          {swapSettings.hideNegativeTotal && hiddenByTotalCount > 0 && (
+            <p className="swap-panel__filters">
+              {hiddenByTotalCount === 1
+                ? '1 call hidden because of negative combined score.'
+                : `${hiddenByTotalCount} calls hidden because of negative combined score.`}
+            </p>
+          )}
 
           {visibleCandidates.length === 0 ? (
             <p className="swap-panel__empty" role="status" aria-live="polite">
@@ -374,6 +528,7 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
                           counterpartLabel={counterpartName}
                           valueFormatter={pressureValueFormatter}
                           deltaFormatter={pressureDeltaFormatter}
+                          residentFocus={residentFocusValue}
                         />
 
                         {candidate.reasons && candidate.reasons.length > 0 && (
@@ -397,6 +552,15 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
                 );
               })}
             </ul>
+          )}
+
+          {(shouldShowGeneral || shouldShowShabbos) && (
+            <div className="swap-panel__debug-sections">
+              {shouldShowGeneral &&
+                renderRejectedSection('Rejected swaps (debug)', rejectedGeneral)}
+              {shouldShowShabbos &&
+                renderRejectedSection('Rejected Shabbos swaps (debug)', rejectedShabbos)}
+            </div>
           )}
         </>
       )}
