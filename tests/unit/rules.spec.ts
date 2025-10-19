@@ -313,6 +313,56 @@ describe('isFeasibleSwap', () => {
     expect(isFeasibleSwap(shiftA, shiftB, ctx)).toBe(false);
   });
 
+  it('rejects IP consult swaps when the recipient is on a restricted rotation', () => {
+    const restrictedRotations = ['Angio', 'GI'];
+
+    for (const rotation of restrictedRotations) {
+      const rotationAssignment = {
+        weekStartISO: '2025-10-06T00:00:00Z',
+        rotation,
+        rawRotation: rotation,
+        vacationDates: [],
+      };
+
+      const residentA = buildResident('R1', ['MOSES', 'IP CONSULT']);
+      const residentB = buildResident('R2', ['MOSES', 'IP CONSULT'], [rotationAssignment]);
+
+      const ipConsultShift = buildShift(
+        'IPC1',
+        residentA.id,
+        '2025-10-08T08:00:00Z',
+        '2025-10-08T20:00:00Z',
+        'IP CONSULT',
+      );
+      const counterpartShift = buildShift(
+        'CALL1',
+        residentB.id,
+        '2025-10-09T08:00:00Z',
+        '2025-10-09T20:00:00Z',
+        'MOSES',
+      );
+
+      const ctx = buildContextWithShifts(
+        baseRuleConfig,
+        [residentA, residentB],
+        [
+          [residentA.id, [ipConsultShift]],
+          [residentB.id, [counterpartShift]],
+        ],
+      );
+
+      const evaluation = explainSwap(ipConsultShift, counterpartShift, ctx);
+      expect(evaluation.feasible).toBe(false);
+      if (!evaluation.feasible) {
+        expect(evaluation.reason.kind).toBe('ip-consult-rotation-ban');
+        if (evaluation.reason.kind === 'ip-consult-rotation-ban') {
+          expect(evaluation.reason.rotation).toBe(rotation);
+        }
+      }
+      expect(isFeasibleSwap(ipConsultShift, counterpartShift, ctx)).toBe(false);
+    }
+  });
+
   it('rejects swap when mixing weekend or holiday shifts with weekday shifts', () => {
     const weekendShift = buildShift(
       'S_weekend',

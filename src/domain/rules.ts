@@ -10,6 +10,7 @@ import {
   isSaturdayNightFloat,
   ShabbosRestriction,
 } from './shabbos';
+import { findRotationForDate } from '@utils/rotations';
 
 export function hasOverlap(
   aStartISO: string,
@@ -61,6 +62,7 @@ const CALL_BLOCK_ROTATION_PATTERNS: RegExp[] = [
 ];
 
 const MRI_COURSE_PATTERN = /\bmri\s+course\b/i;
+const IP_CONSULT_BANNED_ROTATION_PATTERNS: RegExp[] = [/\bangio\b/i, /\bgi\b/i];
 
 function selectBackupPair(
   first: Shift,
@@ -306,6 +308,47 @@ function evaluateShabbosRestriction(
   return null;
 }
 
+function matchesIpConsultBannedRotation(rotationValue: string | undefined): boolean {
+  if (!rotationValue) {
+    return false;
+  }
+  return IP_CONSULT_BANNED_ROTATION_PATTERNS.some((pattern) => pattern.test(rotationValue));
+}
+
+function resolveIpConsultRotationBan(
+  resident: Resident,
+  incomingShift: Shift,
+): SwapRejectionReason | null {
+  if (incomingShift.type !== 'IP CONSULT') {
+    return null;
+  }
+
+  const assignments = resident.rotations ?? [];
+  if (assignments.length === 0) {
+    return null;
+  }
+
+  const assignment = findRotationForDate(assignments, incomingShift.startISO);
+  if (!assignment) {
+    return null;
+  }
+
+  if (
+    !matchesIpConsultBannedRotation(assignment.rotation) &&
+    !matchesIpConsultBannedRotation(assignment.rawRotation)
+  ) {
+    return null;
+  }
+
+  return {
+    kind: 'ip-consult-rotation-ban',
+    residentId: resident.id,
+    shiftId: incomingShift.id,
+    rotation: assignment.rotation,
+    rotationWeekStartISO: assignment.weekStartISO,
+  };
+}
+
 function resolveShabbosRestrictionForSwap(
   shabbosObservers: ReadonlySet<string>,
   residentSwaps: Array<{ resident: Resident; incoming: Shift }>,
@@ -529,6 +572,13 @@ export type SwapRejectionReason =
       conflictDates: string[];
     }
   | {
+      kind: 'ip-consult-rotation-ban';
+      residentId: string;
+      shiftId: string;
+      rotation: string;
+      rotationWeekStartISO: string;
+    }
+  | {
       kind: 'shabbos-restriction';
       residentId: string;
       shiftId: string;
@@ -611,17 +661,18 @@ function prepareSwap(
   }
 
   const { typeWhitelist } = ctx.ruleConfig;
-  if (typeWhitelist.length > 0) {
-    if (!typeWhitelist.includes(a.type) || !typeWhitelist.includes(b.type)) {
-      return {
-        failure: {
-          kind: 'type-whitelist',
-          shiftA: { id: a.id, type: a.type },
-          shiftB: { id: b.id, type: b.type },
-          whitelist: typeWhitelist,
-        },
-      };
-    }
+  if (
+    typeWhitelist.length > 0 &&
+    (!typeWhitelist.includes(a.type) || !typeWhitelist.includes(b.type))
+  ) {
+    return {
+      failure: {
+        kind: 'type-whitelist',
+        shiftA: { id: a.id, type: a.type },
+        shiftB: { id: b.id, type: b.type },
+        whitelist: typeWhitelist,
+      },
+    };
   }
 
   if (!residentA.eligibleShiftTypes.includes(b.type)) {
@@ -722,6 +773,11 @@ function evaluateSwap(
     };
   }
 
+  const ipConsultBanA = resolveIpConsultRotationBan(residentA, swappedForA);
+  if (ipConsultBanA) {
+    return { feasible: false, reason: ipConsultBanA };
+  }
+
   const vacationConflictsB = shiftVacationConflicts(swappedForB, residentB);
   if (vacationConflictsB.length > 0) {
     return {
@@ -748,6 +804,11 @@ function evaluateSwap(
         conflictDates: rotationBlockB.conflictDates,
       },
     };
+  }
+
+  const ipConsultBanB = resolveIpConsultRotationBan(residentB, swappedForB);
+  if (ipConsultBanB) {
+    return { feasible: false, reason: ipConsultBanB };
   }
 
   timelineA.push(swappedForA);
