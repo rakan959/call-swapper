@@ -173,6 +173,26 @@ function describeReason(reason: SwapRejectionReason): unknown {
         shiftType: reason.shiftType,
         shiftStartISO: reason.shiftStartISO,
       };
+    case 'ip-consult-rotation-ban':
+      return {
+        residentId: reason.residentId,
+        shiftId: reason.shiftId,
+        rotation: reason.rotation,
+        rotationWeekStartISO: reason.rotationWeekStartISO,
+      };
+    case 'nf-buffer':
+      return {
+        residentId: reason.residentId,
+        shiftId: reason.shiftId,
+        nfShiftId: reason.nfShiftId,
+        gapDays: reason.gapDays,
+      };
+    case 'weiler-before-nf':
+      return {
+        residentId: reason.residentId,
+        shiftId: reason.shiftId,
+        nfShiftId: reason.nfShiftId,
+      };
     default:
       return undefined;
   }
@@ -205,6 +225,12 @@ function summarizeRejectionReason(reason: SwapRejectionReason): string {
       return `Rotation block conflict (${reason.rotation})`;
     case 'shabbos-restriction':
       return `Shabbos restriction (${reason.restriction}) for resident ${reason.residentId}`;
+    case 'ip-consult-rotation-ban':
+      return `IP consult not allowed during ${reason.rotation} rotation for resident ${reason.residentId}`;
+    case 'nf-buffer':
+      return `Night Float rest buffer: call ${reason.shiftId} is within ${reason.gapDays} day(s) of NF ${reason.nfShiftId}`;
+    case 'weiler-before-nf':
+      return `Weiler call ${reason.shiftId} falls the day before Night Float ${reason.nfShiftId}`;
     case 'unexpected-error':
       return `Unexpected error: ${reason.message}`;
     default:
