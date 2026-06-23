@@ -33,10 +33,12 @@ export class RotationCsvValidationError extends Error {
 
 export type ResidentRotationsMap = Map<string, RotationAssignment[]>;
 export type ResidentAcademicYearMap = Map<string, ResidentAcademicYearAssignment[]>;
+export type ResidentDisplayNameMap = Map<string, string>;
 
 export type RotationParseResult = {
   rotations: ResidentRotationsMap;
   academicYears: ResidentAcademicYearMap;
+  displayNamesById: ResidentDisplayNameMap;
 };
 
 export function parseRotationCsv(csv: string): RotationParseResult {
@@ -57,6 +59,7 @@ export function parseRotationCsv(csv: string): RotationParseResult {
 
   const rotations: ResidentRotationsMap = new Map();
   const academicYears: ResidentAcademicYearMap = new Map();
+  const displayNamesById: ResidentDisplayNameMap = new Map();
 
   let index = 0;
   while (index < rows.length) {
@@ -78,6 +81,7 @@ export function parseRotationCsv(csv: string): RotationParseResult {
         issues,
         rotations,
         academicYears,
+        displayNamesById,
         yearLabel,
         academicYearStartISOs,
       });
@@ -96,7 +100,7 @@ export function parseRotationCsv(csv: string): RotationParseResult {
     throw new RotationCsvValidationError(issues);
   }
 
-  return { rotations, academicYears };
+  return { rotations, academicYears, displayNamesById };
 }
 
 export function findRotationForDate(
@@ -147,6 +151,7 @@ type RotationBlockContext = {
   issues: RotationCsvIssue[];
   rotations: ResidentRotationsMap;
   academicYears: ResidentAcademicYearMap;
+  displayNamesById: ResidentDisplayNameMap;
   yearLabel: string;
   academicYearStartISOs: readonly string[];
 };
@@ -159,6 +164,7 @@ function processRotationBlock(context: RotationBlockContext): number {
     issues,
     rotations,
     academicYears,
+    displayNamesById,
     yearLabel,
     academicYearStartISOs,
   } = context;
@@ -196,6 +202,7 @@ function processRotationBlock(context: RotationBlockContext): number {
       continue;
     }
 
+    if (!displayNamesById.has(residentId)) displayNamesById.set(residentId, label);
     const assignments: RotationAssignment[] = buildAssignmentsForRow(dataRow, weekStarts);
     const existingAssignments = rotations.get(residentId) ?? [];
     rotations.set(residentId, existingAssignments.concat(assignments));
