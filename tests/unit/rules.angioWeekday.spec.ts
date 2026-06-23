@@ -170,4 +170,44 @@ describe('Angio → weekday Moses/Weiler advisory (soft)', () => {
       false,
     );
   });
+
+  it('advises the GIVING resident too: RES_A on Angio receiving a weekday WEILER', () => {
+    // residentA is on Angio and RECEIVES residentB's weekday WEILER → angioAdvisoryA path
+    // (covers both the WEILER branch and the symmetric residentA direction).
+    const residentA = buildResident('RES_A', ALL_TYPES, [angioWeek]);
+    const residentB = buildResident('RES_B', ALL_TYPES);
+    const weilerAGivesAway = buildShift(
+      'WEILER_A_0820',
+      'RES_A',
+      '2026-08-20T08:00:00Z',
+      '2026-08-20T20:00:00Z',
+      'WEILER',
+    );
+    const weilerWedB = buildShift(
+      'WEILER_B_0819',
+      'RES_B',
+      '2026-08-19T08:00:00Z',
+      '2026-08-19T20:00:00Z',
+      'WEILER',
+    );
+
+    const ctx = buildContextWithShifts(
+      baseRuleConfig,
+      [residentA, residentB],
+      [
+        ['RES_A', [weilerAGivesAway]],
+        ['RES_B', [weilerWedB]],
+      ],
+    );
+
+    const evaluation = explainSwap(weilerAGivesAway, weilerWedB, ctx);
+    expect(evaluation.feasible).toBe(true);
+    const angio = evaluation.advisories?.find((a) => a.kind === 'angio-weekday-call');
+    expect(angio).toBeDefined();
+    if (angio && angio.kind === 'angio-weekday-call') {
+      expect(angio.residentId).toBe('RES_A');
+      expect(angio.shiftId).toBe('WEILER_B_0819');
+      expect(angio.rotation).toBe('Angio');
+    }
+  });
 });
