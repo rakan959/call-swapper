@@ -199,6 +199,13 @@ export type SwapAdvisory =
       message: string;
       shiftId: string;
       otherShiftId: string;
+    }
+  | {
+      kind: 'angio-weekday-call';
+      residentId: string;
+      message: string;
+      shiftId: string;
+      rotation: string;
     };
 
 export type SwapPressureCall = {

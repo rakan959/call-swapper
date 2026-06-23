@@ -150,6 +150,35 @@ function adjacencyAdvisories(
   return advisories;
 }
 
+// Soft advisory: taking a weekday Moses/Weiler call while on the Angio rotation is
+// discouraged (IP-consult-on-Angio remains the hard ip-consult-rotation-ban).
+function angioWeekdayAdvisory(resident: Resident, incoming: Shift): SwapAdvisory | null {
+  if (incoming.type !== 'MOSES' && incoming.type !== 'WEILER') {
+    return null;
+  }
+  const dayOfWeek = dayjs(incoming.startISO).day();
+  if (dayOfWeek < 1 || dayOfWeek > 5) {
+    return null;
+  }
+  const assignment = findRotationForDate(resident.rotations ?? [], incoming.startISO);
+  if (!assignment) {
+    return null;
+  }
+  if (
+    !matchesRotationPattern(assignment.rotation, ANGIO_ROTATION_PATTERN) &&
+    !matchesRotationPattern(assignment.rawRotation, ANGIO_ROTATION_PATTERN)
+  ) {
+    return null;
+  }
+  return {
+    kind: 'angio-weekday-call',
+    residentId: resident.id,
+    message: `Weekday ${incoming.type} call while on the Angio rotation`,
+    shiftId: incoming.id,
+    rotation: assignment.rotation,
+  };
+}
+
 const CALL_BLOCK_ROTATION_PATTERNS: RegExp[] = [
   /\bvacation\b/i,
   /\bresearch\b/i,
@@ -166,6 +195,7 @@ const CALL_BLOCK_ROTATION_PATTERNS: RegExp[] = [
 
 const PHYSICS_REVIEW_PATTERN = /\bphysics\s+review\b/i;
 const IP_CONSULT_BANNED_ROTATION_PATTERNS: RegExp[] = [/\bangio\b/i, /\bgi\b/i];
+const ANGIO_ROTATION_PATTERN = /\bangio\b/i;
 
 function selectBackupPair(
   first: Shift,
@@ -993,6 +1023,15 @@ function evaluateSwap(
 
   advisories.push(...adjacencyAdvisories(residentA, swappedForA, timelineA));
   advisories.push(...adjacencyAdvisories(residentB, swappedForB, timelineB));
+
+  const angioAdvisoryA = angioWeekdayAdvisory(residentA, swappedForA);
+  if (angioAdvisoryA) {
+    advisories.push(angioAdvisoryA);
+  }
+  const angioAdvisoryB = angioWeekdayAdvisory(residentB, swappedForB);
+  if (angioAdvisoryB) {
+    advisories.push(angioAdvisoryB);
+  }
 
   return advisories.length > 0 ? { feasible: true, advisories } : { feasible: true };
 }
