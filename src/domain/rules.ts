@@ -53,7 +53,6 @@ const CALL_BLOCK_ROTATION_PATTERNS: RegExp[] = [
   /\bairp\b/i,
   /\bed[\s-]*nights?/i,
   /\brsna\b/i,
-  /\bphysics\s+review\b/i,
   /\bnyrs\s+review\b/i,
   /\bmmc\s+board\s+review\s+prep\b/i,
   /\bnon-interpretive\s+skills\s+review\b/i,
@@ -61,7 +60,7 @@ const CALL_BLOCK_ROTATION_PATTERNS: RegExp[] = [
   /\bus\s+scanning\b/i,
 ];
 
-const MRI_COURSE_PATTERN = /\bmri\s+course\b/i;
+const PHYSICS_REVIEW_PATTERN = /\bphysics\s+review\b/i;
 const IP_CONSULT_BANNED_ROTATION_PATTERNS: RegExp[] = [/\bangio\b/i, /\bgi\b/i];
 
 function selectBackupPair(
@@ -175,10 +174,10 @@ function isRotationBlockedForResident(
     return true;
   }
 
-  const isMriCourse =
-    matchesRotationPattern(assignment.rotation, MRI_COURSE_PATTERN) ||
-    matchesRotationPattern(assignment.rawRotation, MRI_COURSE_PATTERN);
-  if (!isMriCourse) {
+  const isPhysicsReview =
+    matchesRotationPattern(assignment.rotation, PHYSICS_REVIEW_PATTERN) ||
+    matchesRotationPattern(assignment.rawRotation, PHYSICS_REVIEW_PATTERN);
+  if (!isPhysicsReview) {
     return false;
   }
 
