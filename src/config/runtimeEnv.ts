@@ -4,7 +4,7 @@ export const FALLBACK_CSV_URL =
   'https://docs.google.com/spreadsheets/d/1rbtjSPukvOOOp5VGUPV5UV1V5d4MBPctIHxG84O5kr4/gviz/tq?tqx=out:csv&sheet=Schedule';
 
 export const FALLBACK_ROTATION_CSV_URL =
-  'https://docs.google.com/spreadsheets/d/10ti4HkWKXBCfp68Y5y2Cusfabh5i_7PEE4kR_9mgcBE/gviz/tq?tqx=out:csv&sheet=Schedule';
+  'https://docs.google.com/spreadsheets/d/1L26TLcZ6xMh5u11SizLO-3K3SHgTr4N8/gviz/tq?tqx=out:csv&gid=439047137';
 
 export type RuntimeEnv = Readonly<{
   csvUrl: string;

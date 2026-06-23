@@ -24,9 +24,8 @@ import {
   findRotationForDate,
   parseRotationCsv,
   RotationCsvValidationError,
-  ResidentRotationsMap,
-  ResidentAcademicYearMap,
 } from '@utils/rotations';
+import { attachRotationsBySurname } from '@utils/rotationJoin';
 import { findBestSwaps, SwapRejectionDetail, SwapSearchResult } from '@engine/swapEngine';
 import SidePanel from './components/SidePanel';
 import { SHIFT_PALETTE, LegendPaletteEntry } from './components/Legend';
@@ -1128,25 +1127,23 @@ export default function App(): JSX.Element {
           : {
               rotations: new Map<string, RotationAssignment[]>(),
               academicYears: new Map<string, ResidentAcademicYearAssignment[]>(),
+              displayNamesById: new Map<string, string>(),
             };
-        const rotationAssignments: ResidentRotationsMap = rotationData.rotations;
-        const academicYearAssignments: ResidentAcademicYearMap = rotationData.academicYears;
-
         const augmentedDataset: Dataset = {
           ...parsedDataset,
-          residents: parsedDataset.residents.map((resident) => ({
-            ...resident,
-            rotations: rotationAssignments.get(resident.id) ?? [],
-            academicYears: academicYearAssignments.get(resident.id) ?? [],
-          })),
+          residents: attachRotationsBySurname(
+            parsedDataset.residents,
+            rotationData.rotations,
+            rotationData.academicYears,
+            rotationData.displayNamesById,
+          ),
         };
 
-        const scheduleResidentIds = new Set(augmentedDataset.residents.map((entry) => entry.id));
-        const unmatchedRotations = Array.from(rotationAssignments.keys()).filter(
-          (residentId) => !scheduleResidentIds.has(residentId),
+        const residentsMissingRotation = augmentedDataset.residents.filter(
+          (resident) => resident.rotations.length === 0,
         );
-        if (unmatchedRotations.length > 0) {
-          debugLog('app.rotations.unmatched', () => ({ count: unmatchedRotations.length }));
+        if (rotationUrl && residentsMissingRotation.length > 0) {
+          debugLog('app.rotations.missing', () => ({ count: residentsMissingRotation.length }));
         }
 
         setDataset(augmentedDataset);

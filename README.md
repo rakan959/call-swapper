@@ -37,6 +37,9 @@ The `public/` directory ships shared assets such as `favicon.svg` and `robots.tx
 ## Operational runbook
 
 - **Update schedule sources:** set `VITE_CSV_URL` (and optionally `VITE_ROTATION_CSV_URL`) in your deployment environment or `.env` file. Leaving them unset falls back to the baked-in sample URLs, and the app now emits a single debug warning so you can spot the default in local builds.
+  - Current schedule sheet (AY2026-27): `https://docs.google.com/spreadsheets/d/1rbtjSPukvOOOp5VGUPV5UV1V5d4MBPctIHxG84O5kr4/gviz/tq?tqx=out:csv&sheet=Schedule`
+  - Current rotation sheet (AY2026-27): `https://docs.google.com/spreadsheets/d/1L26TLcZ6xMh5u11SizLO-3K3SHgTr4N8/gviz/tq?tqx=out:csv&gid=439047137`
+  - Note: the call schedule uses surname-based resident IDs (e.g. `resident-bains`); the rotation sheet uses full-name IDs (e.g. `resident-henrietta-bains`). Residents are joined to rotation data by surname, so the IDs do not need to match exactly.
 - **Validate a CSV export:** download the candidate file and run `npm run test -- tests/unit/csv.spec.ts` to execute the parsers/contract checks. See `CONTRACTS/csv.md` for schema expectations.
 
 ## Dev
