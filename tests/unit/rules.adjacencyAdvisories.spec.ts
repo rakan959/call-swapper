@@ -188,4 +188,90 @@ describe('Adjacency advisories (soft, never reject)', () => {
       ) ?? false,
     ).toBe(false);
   });
+
+  it('fires BOTH advisories for a same-type Saturday+Sunday pair (independent signals)', () => {
+    const residentA = buildResident('RES_A', ALL_TYPES);
+    const residentB = buildResident('RES_B', ALL_TYPES);
+    // Saturday IP CONSULT swapped for a far Saturday IP CONSULT (passes weekend-match,
+    // dodges Shabbos), with an existing Sunday IP CONSULT of the SAME type.
+    const ipSatA = buildShift(
+      'IP_A_0822',
+      'RES_A',
+      '2026-08-22T08:00:00Z',
+      '2026-08-22T20:00:00Z',
+      'IP CONSULT',
+    );
+    const ipSatBFar = buildShift(
+      'IP_B_1121',
+      'RES_B',
+      '2026-11-21T08:00:00Z',
+      '2026-11-21T20:00:00Z',
+      'IP CONSULT',
+    );
+    const ipSun = buildShift(
+      'IP_B_0823',
+      'RES_B',
+      '2026-08-23T08:00:00Z',
+      '2026-08-23T20:00:00Z',
+      'IP CONSULT',
+    );
+
+    const ctx = buildContextWithShifts(
+      baseRuleConfig,
+      [residentA, residentB],
+      [
+        ['RES_A', [ipSatA]],
+        ['RES_B', [ipSatBFar, ipSun]],
+      ],
+    );
+
+    const evaluation = explainSwap(ipSatA, ipSatBFar, ctx);
+    expect(evaluation.feasible).toBe(true);
+    expect(evaluation.advisories?.some((a) => a.kind === 'consecutive-call') ?? false).toBe(true);
+    expect(evaluation.advisories?.some((a) => a.kind === 'both-weekend') ?? false).toBe(true);
+  });
+
+  it('excludes BACKUP from adjacency: an existing adjacent BACKUP yields no advisory', () => {
+    const residentA = buildResident('RES_A', ALL_TYPES);
+    const residentB = buildResident('RES_B', ALL_TYPES);
+    const mosesTue = buildShift(
+      'MOSES_A_0818',
+      'RES_A',
+      '2026-08-18T08:00:00Z',
+      '2026-08-18T20:00:00Z',
+      'MOSES',
+    );
+    const bGivesAway = buildShift(
+      'MOSES_B_1201',
+      'RES_B',
+      '2026-12-01T08:00:00Z',
+      '2026-12-01T20:00:00Z',
+      'MOSES',
+    );
+    // Existing BACKUP the day before the incoming MOSES — must be ignored by adjacency.
+    const backupMon = buildShift(
+      'BACKUP_B_0817',
+      'RES_B',
+      '2026-08-17T08:00:00Z',
+      '2026-08-17T20:00:00Z',
+      'BACKUP',
+    );
+
+    const ctx = buildContextWithShifts(
+      baseRuleConfig,
+      [residentA, residentB],
+      [
+        ['RES_A', [mosesTue]],
+        ['RES_B', [bGivesAway, backupMon]],
+      ],
+    );
+
+    const evaluation = explainSwap(mosesTue, bGivesAway, ctx);
+    expect(evaluation.feasible).toBe(true);
+    expect(
+      evaluation.advisories?.some(
+        (a) => a.kind === 'consecutive-call' || a.kind === 'both-weekend',
+      ) ?? false,
+    ).toBe(false);
+  });
 });
