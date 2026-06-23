@@ -145,8 +145,9 @@ export function parseCsvToDataset(csv: string): Dataset {
   const normalizedFieldSet = new Set<string>(
     originalFields.map((field: string) => normalizeHeader(field)),
   );
+  const hasBlankFirstColumn = isBlankHeader(originalFields[0] ?? '');
 
-  if (looksLikeGridCsv(normalizedFieldSet)) {
+  if (looksLikeGridCsv(normalizedFieldSet, hasBlankFirstColumn)) {
     return parseGridCsv(parsed, issues, originalFields);
   }
 
@@ -215,13 +216,21 @@ function parseGridCsv(
     };
   });
 
-  const dateHeader = headerLookup.get('date');
+  let dateHeader = headerLookup.get('date');
+  let dateColumnIndex = -1;
+  if (dateHeader === undefined && isBlankHeader(originalFields[0] ?? '')) {
+    // Blank-headed first column holds the dates (live master-sheet layout where
+    // the A1 label is empty). Papa keys that column as '' — falsy but a valid
+    // row key, so test resolution with `=== undefined`, never truthiness.
+    dateHeader = (parsed.meta.fields ?? [])[0] ?? '';
+    dateColumnIndex = 0;
+  }
   const dayHeader =
     headerLookup.get('day') ??
     headerLookup.get('day of week') ??
     headerLookup.get('weekday') ??
     headerLookup.get('day-of-week');
-  if (!dateHeader) {
+  if (dateHeader === undefined) {
     issues.push({ row: 1, column: 'Date', message: 'Missing required column' });
   }
 
@@ -230,6 +239,10 @@ function parseGridCsv(
     const rows = parsed.data;
 
     blankHeaderIndexes.forEach((index) => {
+      if (index === dateColumnIndex) {
+        // The blank-headed first column is the resolved date column, not a stray.
+        return;
+      }
       const columnLabel = `Column ${index + 1}`;
       const fieldKey = fieldKeys[index] ?? '';
       const hasData = rows.some((row) => {
@@ -441,8 +454,11 @@ function isWeekendOrHoliday(context: ShiftRowContext): boolean {
   return context.isWeekend || context.isHoliday;
 }
 
-function looksLikeGridCsv(normalizedFieldSet: Set<string>): boolean {
-  if (!normalizedFieldSet.has('date')) {
+function looksLikeGridCsv(normalizedFieldSet: Set<string>, hasBlankFirstColumn: boolean): boolean {
+  // The date column is normally labeled "Date"; the live master sheet ships it
+  // with a blank header (dates in the first column, no A1 label). Accept either —
+  // but still require a recognizable shift column so non-grid CSVs don't match.
+  if (!normalizedFieldSet.has('date') && !hasBlankFirstColumn) {
     return false;
   }
   return GRID_SHIFT_CONFIGS.some((config) =>
@@ -452,6 +468,12 @@ function looksLikeGridCsv(normalizedFieldSet: Set<string>): boolean {
 
 function normalizeHeader(header: string): string {
   return header.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function isBlankHeader(field: string): boolean {
+  // Mirrors the blank-detection in parseGridCsv: strip BOM + Papa's `_N`
+  // duplicate suffix, then normalize. Empty ⇒ the column had no header label.
+  return normalizeHeader(stripBom(field).replace(/_\d+$/, '')) === '';
 }
 
 function parseGridDate(value: string): Dayjs | null {

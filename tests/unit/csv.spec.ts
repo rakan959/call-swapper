@@ -79,6 +79,21 @@ describe('CSV ingestion', () => {
     expect(dataset.shifts).toHaveLength(3);
   });
 
+  it('parses a schedule grid whose date column has a blank header', () => {
+    // Regression: the live master sheet ships a blank top-left cell (no "Date"
+    // label) with the dates in the first column. The parser must still detect
+    // the grid and treat the blank-headed first column as the date column.
+    const csv = `,Day,Moses Junior,Moses Senior,Weiler,IP Consult,Backup/Angio,Night Float
+6/22/2026,Mon,Pierce,Brooks,Sherman,,Chandrupatla,Gozland`;
+
+    const dataset = parseCsvToDataset(csv);
+
+    expect(dataset.shifts.length).toBeGreaterThan(0);
+    expect(dataset.shifts.some((shift) => shift.id.startsWith('2026-06-22_MOSES_JR'))).toBe(true);
+    const names = dataset.residents.map((resident) => resident.name);
+    expect(names).toContain('Pierce');
+  });
+
   it('ignores vacancy tokens and excluded columns in grid format', () => {
     const gridCsv = `Date,Day,Moses Junior,Moses Senior,Weiler,IP Consult,Backup/Angio,Night Float,IR,Chief
 2024-11-03,Sunday,OFF,VACATION,TBD,,N/A,OFF,IR Person,Chief Person`;
