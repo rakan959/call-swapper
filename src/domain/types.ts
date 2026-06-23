@@ -174,16 +174,32 @@ export type Dataset = z.infer<typeof DatasetSchema>;
 
 export type SwapAdvisoryCode = 'REST_WINDOW' | 'OVERLAP';
 
-export type SwapAdvisory = {
-  kind: 'backup-conflict';
-  code: SwapAdvisoryCode;
-  residentId: string;
-  backupShiftId: string;
-  otherShiftId: string;
-  message: string;
-  restHours?: number;
-  minimumRestHours?: number;
-};
+export type SwapAdvisory =
+  | {
+      kind: 'backup-conflict';
+      code: SwapAdvisoryCode;
+      residentId: string;
+      backupShiftId: string;
+      otherShiftId: string;
+      message: string;
+      restHours?: number;
+      minimumRestHours?: number;
+    }
+  | {
+      kind: 'consecutive-call';
+      residentId: string;
+      message: string;
+      shiftId: string;
+      adjacentShiftId: string;
+      callType: ShiftType;
+    }
+  | {
+      kind: 'both-weekend';
+      residentId: string;
+      message: string;
+      shiftId: string;
+      otherShiftId: string;
+    };
 
 export type SwapPressureCall = {
   shiftId: string;

@@ -138,7 +138,11 @@ describe('validateResidentTimeline', () => {
     });
 
     expect(advisories).toHaveLength(1);
-    expect(advisories[0]?.code).toBe('REST_WINDOW');
+    const advisory = advisories[0];
+    expect(advisory?.kind).toBe('backup-conflict');
+    if (advisory?.kind === 'backup-conflict') {
+      expect(advisory.code).toBe('REST_WINDOW');
+    }
   });
 
   it('ignores rest window checks between consecutive backup shifts', () => {
@@ -401,7 +405,11 @@ describe('isFeasibleSwap', () => {
 
     const evaluation = explainSwap(shiftA, shiftB, ctx);
     expect(evaluation.feasible).toBe(true);
-    expect(evaluation.advisories?.some((advisory) => advisory.code === 'REST_WINDOW')).toBe(true);
+    expect(
+      evaluation.advisories?.some(
+        (advisory) => advisory.kind === 'backup-conflict' && advisory.code === 'REST_WINDOW',
+      ),
+    ).toBe(true);
     expect(isFeasibleSwap(shiftA, shiftB, ctx)).toBe(true);
   });
 

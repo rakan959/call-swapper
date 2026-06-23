@@ -104,6 +104,52 @@ function weilerBeforeNfConflict(
   return null;
 }
 
+// Soft adjacency advisories (never reject): same call type on adjacent days, and
+// calls on both days of a Sat+Sun weekend. Backup and Night Float are excluded
+// (Backup = standby; NF = block rotation), consistent with the "Backup isn't a
+// true call" ruling.
+function adjacencyAdvisories(
+  resident: Resident,
+  incoming: Shift,
+  timeline: readonly Shift[],
+): SwapAdvisory[] {
+  const advisories: SwapAdvisory[] = [];
+  if (incoming.type === 'BACKUP' || incoming.type === 'NIGHT FLOAT') {
+    return advisories;
+  }
+  const incomingDay = dayjs(incoming.startISO).startOf('day');
+  for (const shift of timeline) {
+    if (shift.id === incoming.id || shift.type === 'BACKUP' || shift.type === 'NIGHT FLOAT') {
+      continue;
+    }
+    const shiftDay = dayjs(shift.startISO).startOf('day');
+    if (Math.abs(incomingDay.diff(shiftDay, 'day')) !== 1) {
+      continue;
+    }
+    if (shift.type === incoming.type) {
+      advisories.push({
+        kind: 'consecutive-call',
+        residentId: resident.id,
+        message: `Consecutive ${incoming.type} calls on adjacent days`,
+        shiftId: incoming.id,
+        adjacentShiftId: shift.id,
+        callType: incoming.type,
+      });
+    }
+    const weekdays = new Set([incomingDay.day(), shiftDay.day()]);
+    if (weekdays.has(0) && weekdays.has(6)) {
+      advisories.push({
+        kind: 'both-weekend',
+        residentId: resident.id,
+        message: 'Calls on both weekend days (Saturday and Sunday)',
+        shiftId: incoming.id,
+        otherShiftId: shift.id,
+      });
+    }
+  }
+  return advisories;
+}
+
 const CALL_BLOCK_ROTATION_PATTERNS: RegExp[] = [
   /\bvacation\b/i,
   /\bresearch\b/i,
@@ -944,6 +990,9 @@ function evaluateSwap(
       advisories: advisories.length > 0 ? advisories : undefined,
     };
   }
+
+  advisories.push(...adjacencyAdvisories(residentA, swappedForA, timelineA));
+  advisories.push(...adjacencyAdvisories(residentB, swappedForB, timelineB));
 
   return advisories.length > 0 ? { feasible: true, advisories } : { feasible: true };
 }
