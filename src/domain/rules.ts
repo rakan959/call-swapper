@@ -74,6 +74,36 @@ function nfBufferConflict(
   return null;
 }
 
+// Scoped to an incoming WEILER landing the day before an existing NF. The reverse
+// direction (an incoming NF the day after an existing Weiler) is not handled here
+// because a non-Saturday NF is already shabbos-restricted for every resident
+// (see evaluateShabbosRestriction), so it never reaches this check; the only
+// uncovered residue is a Saturday NF after a Friday Weiler (noted for final review).
+function weilerBeforeNfConflict(
+  resident: Resident,
+  incoming: Shift,
+  timeline: readonly Shift[],
+): SwapRejectionReason | null {
+  if (incoming.type !== 'WEILER') {
+    return null;
+  }
+  const dayAfterWeiler = dayjs(incoming.startISO).startOf('day').add(1, 'day');
+  for (const shift of timeline) {
+    if (shift.type !== 'NIGHT FLOAT') {
+      continue;
+    }
+    if (dayjs(shift.startISO).startOf('day').isSame(dayAfterWeiler, 'day')) {
+      return {
+        kind: 'weiler-before-nf',
+        residentId: resident.id,
+        shiftId: incoming.id,
+        nfShiftId: shift.id,
+      };
+    }
+  }
+  return null;
+}
+
 const CALL_BLOCK_ROTATION_PATTERNS: RegExp[] = [
   /\bvacation\b/i,
   /\bresearch\b/i,
@@ -620,6 +650,12 @@ export type SwapRejectionReason =
       nfShiftId: string;
       gapDays: number;
     }
+  | {
+      kind: 'weiler-before-nf';
+      residentId: string;
+      shiftId: string;
+      nfShiftId: string;
+    }
   | { kind: 'unexpected-error'; message: string; shiftA: string; shiftB: string };
 
 type PreparedSwap = {
@@ -843,6 +879,16 @@ function evaluateSwap(
   const ipConsultBanB = resolveIpConsultRotationBan(residentB, swappedForB);
   if (ipConsultBanB) {
     return { feasible: false, reason: ipConsultBanB };
+  }
+
+  const weilerBeforeNfA = weilerBeforeNfConflict(residentA, swappedForA, timelineA);
+  if (weilerBeforeNfA) {
+    return { feasible: false, reason: weilerBeforeNfA };
+  }
+
+  const weilerBeforeNfB = weilerBeforeNfConflict(residentB, swappedForB, timelineB);
+  if (weilerBeforeNfB) {
+    return { feasible: false, reason: weilerBeforeNfB };
   }
 
   const nfBufferA = nfBufferConflict(residentA, swappedForA, timelineA);
