@@ -45,6 +45,34 @@ type TimelineValidationOptions = {
 
 const EMPTY_SOFT_TYPES: ReadonlySet<Shift['type']> = new Set();
 const BACKUP_SOFT_TYPES: ReadonlySet<Shift['type']> = new Set(['BACKUP']);
+const TRUE_CALL_TYPES: ReadonlySet<Shift['type']> = new Set(['MOSES', 'WEILER', 'IP CONSULT']);
+
+function nfBufferConflict(
+  resident: Resident,
+  incoming: Shift,
+  timeline: readonly Shift[],
+): SwapRejectionReason | null {
+  if (!TRUE_CALL_TYPES.has(incoming.type)) {
+    return null;
+  }
+  const day = dayjs(incoming.startISO).startOf('day');
+  for (const shift of timeline) {
+    if (shift.type !== 'NIGHT FLOAT') {
+      continue;
+    }
+    const gap = Math.abs(day.diff(dayjs(shift.startISO).startOf('day'), 'day'));
+    if (gap < 2) {
+      return {
+        kind: 'nf-buffer',
+        residentId: resident.id,
+        shiftId: incoming.id,
+        nfShiftId: shift.id,
+        gapDays: gap,
+      };
+    }
+  }
+  return null;
+}
 
 const CALL_BLOCK_ROTATION_PATTERNS: RegExp[] = [
   /\bvacation\b/i,
@@ -585,6 +613,13 @@ export type SwapRejectionReason =
       shiftStartISO: string;
       restriction: ShabbosRestriction;
     }
+  | {
+      kind: 'nf-buffer';
+      residentId: string;
+      shiftId: string;
+      nfShiftId: string;
+      gapDays: number;
+    }
   | { kind: 'unexpected-error'; message: string; shiftA: string; shiftB: string };
 
 type PreparedSwap = {
@@ -808,6 +843,16 @@ function evaluateSwap(
   const ipConsultBanB = resolveIpConsultRotationBan(residentB, swappedForB);
   if (ipConsultBanB) {
     return { feasible: false, reason: ipConsultBanB };
+  }
+
+  const nfBufferA = nfBufferConflict(residentA, swappedForA, timelineA);
+  if (nfBufferA) {
+    return { feasible: false, reason: nfBufferA };
+  }
+
+  const nfBufferB = nfBufferConflict(residentB, swappedForB, timelineB);
+  if (nfBufferB) {
+    return { feasible: false, reason: nfBufferB };
   }
 
   timelineA.push(swappedForA);
