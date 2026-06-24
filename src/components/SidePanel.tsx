@@ -5,7 +5,6 @@ import { Dataset, Resident, Shift, ShiftType, SwapAdvisory, SwapCandidate } from
 import { SwapSettings } from '@domain/swapSettings';
 import { findSwapsForShift, SwapRejectionDetail, SwapSearchResult } from '@engine/swapEngine';
 import { findRotationForDate } from '@utils/rotations';
-import { formatScore } from '@utils/score';
 import {
   createSwapComparator,
   defaultSortDirection,
@@ -93,6 +92,7 @@ type SwapFinderSectionProps = Readonly<{
 }>;
 
 const EMPTY_ROTATION_LABEL = '—';
+const INELIGIBLE_PREVIEW_LIMIT = 8;
 
 type RotationPair = {
   before: string | null;
@@ -463,7 +463,6 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
                         </span>
                         <span className="swap-card__rank">
                           <span className="swap-card__rank-num">#{candidateIndex + 1}</span>
-                          <span className="swap-card__relief">{formatScore(candidate.score)}</span>
                         </span>
                       </span>
                       <span className="swap-card__chips">
@@ -581,7 +580,7 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
                 Not eligible · {rejectedCandidates.length}
               </h4>
               <ul className="swap-panel__ineligible-list">
-                {rejectedCandidates.map((entry) => {
+                {rejectedCandidates.slice(0, INELIGIBLE_PREVIEW_LIMIT).map((entry) => {
                   const counterpartName =
                     residentsById.get(entry.b.residentId)?.name ?? entry.b.residentId;
                   return (
@@ -602,6 +601,11 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
                   );
                 })}
               </ul>
+              {rejectedCandidates.length > INELIGIBLE_PREVIEW_LIMIT && (
+                <p className="swap-panel__ineligible-detail">
+                  + {rejectedCandidates.length - INELIGIBLE_PREVIEW_LIMIT} more not eligible
+                </p>
+              )}
             </section>
           )}
         </>
