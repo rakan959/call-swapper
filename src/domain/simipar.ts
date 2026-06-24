@@ -35,8 +35,13 @@ const ROTATION_PRESSURE_PATTERNS: RegExp[] = [
 const ROTATION_MAMMO_PATTERN = /mammo/i;
 
 /**
- * proximityPressure: deterministic swap desirability score in [-1, 1].
- * Positive deltas indicate the swap improves aggregate pressure; negative values indicate regressions.
+ * proximityPressure: deterministic relative desirability score used to rank candidate swaps.
+ *
+ * Positive = the swap relieves aggregate call pressure across both residents; negative = it adds
+ * pressure. The magnitude is a relative ranking signal, NOT a normalized [-1, 1] value:
+ * calculateSwapPressure sums the two per-resident section deltas, scales them by SCORE_SCALE and the
+ * per-shift weekend/night-float multipliers, then folds in flat IP-consult / rotation and
+ * chain/weekend-streak adjustments. See tests/property/rules.property.spec.ts for the derived bound.
  */
 export function proximityPressure(a: Shift, b: Shift, ctx: Context): number {
   return calculateSwapPressure(a, b, ctx).score;
