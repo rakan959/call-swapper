@@ -173,6 +173,14 @@ function describeReason(reason: SwapRejectionReason): unknown {
         shiftType: reason.shiftType,
         shiftStartISO: reason.shiftStartISO,
       };
+    case 'rotation-block':
+      return {
+        residentId: reason.residentId,
+        shiftId: reason.shiftId,
+        rotation: reason.rotation,
+        rotationWeekStartISO: reason.rotationWeekStartISO,
+        conflictDates: reason.conflictDates,
+      };
     case 'ip-consult-rotation-ban':
       return {
         residentId: reason.residentId,
