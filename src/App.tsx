@@ -1243,21 +1243,76 @@ export default function App(): JSX.Element {
       <main
         className={`app__main${selectedShift && selectedPalette && dataset ? ' app__main--detail' : ''}`}
       >
-        <section className="calendar-panel" aria-label="Call schedule calendar">
-          <div
-            className="calendar-panel__calendar"
-            aria-live="polite"
-            aria-busy={loadState === 'loading'}
-          >
-            <MonthGrid
-              shifts={visibleShifts}
-              selectedShiftId={selectedShiftId}
-              onSelectShift={setSelectedShiftId}
-              rotationByWeek={rotationAssignmentsByWeek}
-              residentName={filteredResident?.name ?? null}
+        <div className="app__content">
+          <section className="calendar-panel" aria-label="Call schedule calendar">
+            <div
+              className="calendar-panel__calendar"
+              aria-live="polite"
+              aria-busy={loadState === 'loading'}
+            >
+              <MonthGrid
+                shifts={visibleShifts}
+                selectedShiftId={selectedShiftId}
+                onSelectShift={setSelectedShiftId}
+                rotationByWeek={rotationAssignmentsByWeek}
+                residentName={filteredResident?.name ?? null}
+              />
+            </div>
+          </section>
+
+          <section className="best-swaps-panel" aria-label="Find best swaps">
+            <header className="best-swaps-panel__header">
+              <div>
+                <h2 className="best-swaps-panel__title">Find best swaps</h2>
+                <p className="best-swaps-panel__subtitle">
+                  {filteredResident
+                    ? `Search for the strongest swap partners for ${filteredResident.name}.`
+                    : 'Choose a resident to enable tailored swap recommendations.'}
+                </p>
+              </div>
+              <div className="best-swaps-panel__actions">
+                <button
+                  type="button"
+                  className="best-swaps-panel__action"
+                  onClick={handleFindBestSwaps}
+                  disabled={isBestSwapsActionDisabled}
+                >
+                  {bestSwapsState.status === 'loading' ? 'Finding…' : 'Find best swaps'}
+                </button>
+              </div>
+            </header>
+
+            {bestSwapsContent}
+
+            <AllSwapsPanel
+              status={bestSwapsState.status}
+              error={bestSwapsState.error}
+              candidates={bestSwapsAccepted}
+              rejections={bestSwapsState.result?.rejected ?? []}
+              residentsById={residentsById}
+              residentNameById={residentNameById}
+              selectedResidentName={filteredResident?.name ?? null}
+              dateFormatter={bestSwapDateFormatter}
+              valueFormatter={pressureValueFormatter}
+              deltaFormatter={pressureDeltaFormatter}
+              settings={swapSettings}
             />
-          </div>
-        </section>
+          </section>
+
+          <section className="status-panel" aria-live="polite">
+            {loadState === 'loading' && <p>Loading schedule…</p>}
+            {loadState === 'error' && loadError && (
+              <p role="alert">Unable to load the schedule: {loadError}</p>
+            )}
+            {loadState === 'idle' && !dataset && (
+              <p>
+                Configure a CSV source by setting <code>VITE_CSV_URL</code> during build or defining{' '}
+                <code>window.CSV_URL</code> before the app loads.
+              </p>
+            )}
+            {loadState === 'ready' && scheduleSummary && <p>{scheduleSummary}</p>}
+          </section>
+        </div>
 
         {selectedShift && selectedPalette && dataset && (
           <div className="side-panel-layer">
@@ -1277,58 +1332,6 @@ export default function App(): JSX.Element {
             />
           </div>
         )}
-        <section className="best-swaps-panel" aria-label="Find best swaps">
-          <header className="best-swaps-panel__header">
-            <div>
-              <h2 className="best-swaps-panel__title">Find best swaps</h2>
-              <p className="best-swaps-panel__subtitle">
-                {filteredResident
-                  ? `Search for the strongest swap partners for ${filteredResident.name}.`
-                  : 'Choose a resident to enable tailored swap recommendations.'}
-              </p>
-            </div>
-            <div className="best-swaps-panel__actions">
-              <button
-                type="button"
-                className="best-swaps-panel__action"
-                onClick={handleFindBestSwaps}
-                disabled={isBestSwapsActionDisabled}
-              >
-                {bestSwapsState.status === 'loading' ? 'Finding…' : 'Find best swaps'}
-              </button>
-            </div>
-          </header>
-
-          {bestSwapsContent}
-
-          <AllSwapsPanel
-            status={bestSwapsState.status}
-            error={bestSwapsState.error}
-            candidates={bestSwapsAccepted}
-            rejections={bestSwapsState.result?.rejected ?? []}
-            residentsById={residentsById}
-            residentNameById={residentNameById}
-            selectedResidentName={filteredResident?.name ?? null}
-            dateFormatter={bestSwapDateFormatter}
-            valueFormatter={pressureValueFormatter}
-            deltaFormatter={pressureDeltaFormatter}
-            settings={swapSettings}
-          />
-        </section>
-
-        <section className="status-panel" aria-live="polite">
-          {loadState === 'loading' && <p>Loading schedule…</p>}
-          {loadState === 'error' && loadError && (
-            <p role="alert">Unable to load the schedule: {loadError}</p>
-          )}
-          {loadState === 'idle' && !dataset && (
-            <p>
-              Configure a CSV source by setting <code>VITE_CSV_URL</code> during build or defining{' '}
-              <code>window.CSV_URL</code> before the app loads.
-            </p>
-          )}
-          {loadState === 'ready' && scheduleSummary && <p>{scheduleSummary}</p>}
-        </section>
       </main>
     </div>
   );

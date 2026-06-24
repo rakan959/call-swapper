@@ -1643,34 +1643,37 @@ body {
   }
 }
 
+.app__content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  min-width: 0;
+}
+
 @media (min-width: 960px) {
   /* Two-panel layout only while a shift detail panel is open; when idle the
-     calendar and panels use the full width of the main column (no empty gutter). */
+     calendar (and panels) use the full width of the main column (no gutter). */
   .app__main--detail {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(18rem, 360px);
-    grid-auto-flow: row dense;
     gap: 1.75rem;
     align-items: start;
   }
 
-  .app__main--detail .calendar-panel,
-  .app__main--detail .status-panel,
-  .app__main--detail .best-swaps-panel {
+  .app__main--detail .app__content {
     grid-column: 1;
   }
 
-  .app__main--detail .side-panel,
-  .app__main--detail .legend-panel {
+  /* The detail panel pins to the top while the whole page scrolls: column 2's
+     grid area spans the full height of the content column, and the panel sticks
+     within it (align-self: start keeps the area tall enough to stick against). */
+  .app__main--detail .side-panel {
     grid-column: 2;
     position: sticky;
     top: clamp(1rem, 4vw, 2.5rem);
     align-self: start;
-  }
-
-  .app__main--detail .legend-panel {
-    max-height: calc(100vh - 3rem);
-    overflow-y: auto;
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
   }
 }
 
