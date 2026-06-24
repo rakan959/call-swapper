@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import dayjs from '@utils/dayjs';
-import { Dataset, Resident, Shift, ShiftType, SwapCandidate } from '@domain/types';
+import { Dataset, Resident, Shift, ShiftType, SwapAdvisory, SwapCandidate } from '@domain/types';
 import { SwapSettings } from '@domain/swapSettings';
 import { findSwapsForShift, SwapRejectionDetail, SwapSearchResult } from '@engine/swapEngine';
 import { findRotationForDate } from '@utils/rotations';
@@ -42,6 +42,49 @@ const TYPE_LABELS: Record<ShiftType, string> = {
   'NIGHT FLOAT': 'Night Float',
   BACKUP: 'Backup',
 };
+
+// Short, glanceable chip label for a soft advisory (full text stays in `message`).
+function advisoryChipLabel(advisory: SwapAdvisory): string {
+  switch (advisory.kind) {
+    case 'consecutive-call':
+      return 'Consecutive call';
+    case 'both-weekend':
+      return 'Both weekend days';
+    case 'angio-weekday-call':
+      return 'Angio weekday';
+    case 'backup-conflict':
+      return advisory.code === 'OVERLAP' ? 'Shift overlap' : 'Short rest';
+    default:
+      return 'Advisory';
+  }
+}
+
+// Short, glanceable chip label for why a swap is ineligible (full text in reasonLabel).
+function rejectionChipLabel(reason: SwapRejectionDetail['reason']): string {
+  switch (reason.kind) {
+    case 'nf-buffer':
+      return 'NF rest buffer';
+    case 'weiler-before-nf':
+      return 'Weiler before NF';
+    case 'rotation-block':
+      return 'Rotation block';
+    case 'ip-consult-rotation-ban':
+      return 'IP-consult rotation';
+    case 'shabbos-restriction':
+      return 'Shabbos';
+    case 'vacation-conflict':
+      return 'Vacation';
+    case 'rule-violation':
+      return 'Rest / overlap';
+    case 'eligibility-a':
+    case 'eligibility-b':
+      return 'Not eligible';
+    case 'type-whitelist':
+      return 'Shift type';
+    default:
+      return 'Ineligible';
+  }
+}
 
 type SwapFinderSectionProps = Readonly<{
   dataset: Dataset;
@@ -278,49 +321,6 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
     setExpandedCandidateId((previous) => (previous === candidateId ? null : candidateId));
   };
 
-  const rejectedGeneral = useMemo(() => {
-    return rejectedCandidates.filter((entry) => entry.category === 'general');
-  }, [rejectedCandidates]);
-
-  const rejectedShabbos = useMemo(() => {
-    return rejectedCandidates.filter((entry) => entry.category === 'shabbos');
-  }, [rejectedCandidates]);
-
-  const shouldShowGeneral = swapSettings.showRejectedSwaps && rejectedGeneral.length > 0;
-  const shouldShowShabbos = swapSettings.showShabbosRejectedSwaps && rejectedShabbos.length > 0;
-
-  const renderRejectedSection = (label: string, items: SwapRejectionDetail[]) => {
-    return (
-      <section className="swap-panel__debug" aria-label={label}>
-        <h4 className="swap-panel__debug-title">{label}</h4>
-        <ul className="swap-panel__debug-list">
-          {items.map((entry) => {
-            const counterpartResident = residentsById.get(entry.b.residentId);
-            const counterpartName = counterpartResident?.name ?? entry.b.residentId;
-            const swapDate = formatSwapDate(entry.b);
-            const scoreLabel = formatScore(entry.score);
-            return (
-              <li key={`rejected-${entry.a.id}-${entry.b.id}`} className="swap-panel__debug-item">
-                <div className="swap-panel__debug-row">
-                  <span className="swap-panel__debug-col swap-panel__debug-col--date">
-                    {swapDate}
-                  </span>
-                  <span className="swap-panel__debug-col swap-panel__debug-col--resident">
-                    {counterpartName}
-                  </span>
-                  <span className="swap-panel__debug-col swap-panel__debug-col--score">
-                    {scoreLabel}
-                  </span>
-                </div>
-                <p className="swap-panel__debug-reason">{entry.reasonLabel}</p>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-    );
-  };
-
   return (
     <section className="swap-panel" aria-label="Swap finder" aria-busy={loadState === 'loading'}>
       <header className="swap-panel__header">
@@ -417,7 +417,7 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
             </p>
           ) : (
             <ul className="swap-panel__list" aria-label="Swap suggestions">
-              {visibleCandidates.map((candidate) => {
+              {visibleCandidates.map((candidate, candidateIndex) => {
                 const swapKey = `${candidate.a.id}-${candidate.b.id}`;
                 const isExpanded = expandedCandidateId === swapKey;
                 const detailsId = `swap-details-${swapKey}`;
@@ -437,7 +437,7 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
                   candidate.b.startISO,
                   candidate.a.startISO,
                 );
-                const myScoreLabel = `${formatScore(candidate.pressure.original.deltaTotal)}|${formatScore(candidate.score)}`;
+                const advisories = candidate.advisories ?? [];
                 return (
                   <li
                     key={swapKey}
@@ -445,20 +445,41 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
                   >
                     <button
                       type="button"
-                      className="swap-panel__row"
+                      className="swap-panel__row swap-card"
                       aria-expanded={isExpanded}
                       aria-controls={detailsId}
                       aria-label={`Swap with ${counterpartName} on ${targetDateLabel}`}
                       onClick={() => toggleCandidate(swapKey)}
                     >
-                      <span className="swap-panel__cell swap-panel__cell--date">
-                        {targetDateLabel}
+                      <span className="swap-card__head">
+                        <span className="swap-card__who">
+                          <span className="swap-card__resident">{counterpartName}</span>
+                          <span className="swap-card__line">
+                            gives {TYPE_LABELS[candidate.b.type]} · {targetDateLabel}
+                          </span>
+                          <span className="swap-card__line swap-card__line--muted">
+                            takes your {TYPE_LABELS[candidate.a.type]} · {originalDateLabel}
+                          </span>
+                        </span>
+                        <span className="swap-card__rank">
+                          <span className="swap-card__rank-num">#{candidateIndex + 1}</span>
+                          <span className="swap-card__relief">{formatScore(candidate.score)}</span>
+                        </span>
                       </span>
-                      <span className="swap-panel__cell swap-panel__cell--resident">
-                        {counterpartName}
-                      </span>
-                      <span className="swap-panel__cell swap-panel__cell--score">
-                        {myScoreLabel}
+                      <span className="swap-card__chips">
+                        {advisories.length > 0 ? (
+                          advisories.map((advisory, advisoryIndex) => (
+                            <span
+                              key={`${swapKey}-chip-${advisoryIndex}`}
+                              className="chip chip--warn"
+                              title={advisory.message}
+                            >
+                              ⚠ {advisoryChipLabel(advisory)}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="chip chip--ok">✓ No caveats</span>
+                        )}
                       </span>
                     </button>
 
@@ -554,13 +575,34 @@ function SwapFinderSection({ dataset, shift, swapSettings }: SwapFinderSectionPr
             </ul>
           )}
 
-          {(shouldShowGeneral || shouldShowShabbos) && (
-            <div className="swap-panel__debug-sections">
-              {shouldShowGeneral &&
-                renderRejectedSection('Rejected swaps (debug)', rejectedGeneral)}
-              {shouldShowShabbos &&
-                renderRejectedSection('Rejected Shabbos swaps (debug)', rejectedShabbos)}
-            </div>
+          {rejectedCandidates.length > 0 && (
+            <section className="swap-panel__ineligible" aria-label="Not eligible swaps">
+              <h4 className="swap-panel__ineligible-title">
+                Not eligible · {rejectedCandidates.length}
+              </h4>
+              <ul className="swap-panel__ineligible-list">
+                {rejectedCandidates.map((entry) => {
+                  const counterpartName =
+                    residentsById.get(entry.b.residentId)?.name ?? entry.b.residentId;
+                  return (
+                    <li
+                      key={`ineligible-${entry.a.id}-${entry.b.id}`}
+                      className="swap-panel__ineligible-item"
+                    >
+                      <span className="swap-panel__ineligible-who">
+                        <span className="swap-panel__ineligible-resident">{counterpartName}</span>
+                        <span className="swap-panel__ineligible-detail">
+                          gives {TYPE_LABELS[entry.b.type]} · {formatSwapDate(entry.b)}
+                        </span>
+                      </span>
+                      <span className="chip chip--reject" title={entry.reasonLabel}>
+                        ✕ {rejectionChipLabel(entry.reason)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
           )}
         </>
       )}

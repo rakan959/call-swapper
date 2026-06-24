@@ -617,7 +617,8 @@ describe('App side panel selection', () => {
       expect(first).toContain('Diana Flores');
       expect(second).toContain('Carol Evans');
       expect(third).toContain('Bob Stone');
-      expect(first).toContain('|');
+      // best-scored candidate carries the quiet rank #1 in the redesigned card
+      expect(first).toContain('#1');
     });
 
     const sortSelect = within(swapSection).getByLabelText('Sort by');

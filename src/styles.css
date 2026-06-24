@@ -1834,3 +1834,157 @@ body {
 .fc .fc-list-event:hover td {
   background-color: rgba(56, 189, 248, 0.12);
 }
+
+/* === Refined swap cards (Option A: rules-led, pressure quiet) === */
+.swap-panel__row.swap-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 13px 14px;
+}
+
+.swap-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.swap-card__who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.swap-card__resident {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #e7eaf2;
+}
+
+.swap-card__line {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.swap-card__line--muted {
+  color: var(--color-text-subtle);
+}
+
+.swap-card__rank {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.swap-card__rank-num {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.swap-card__relief {
+  font-size: 0.68rem;
+  color: var(--color-text-subtle);
+}
+
+.swap-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+
+.chip--ok {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.28);
+  color: #4ade80;
+}
+
+.chip--warn {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.chip--reject {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #f87171;
+}
+
+/* Not-eligible (rejected) swaps surfaced by default */
+.swap-panel__ineligible {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.swap-panel__ineligible-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.swap-panel__ineligible-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.swap-panel__ineligible-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: rgba(2, 6, 23, 0.4);
+}
+
+.swap-panel__ineligible-who {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.swap-panel__ineligible-resident {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.swap-panel__ineligible-detail {
+  font-size: 0.72rem;
+  color: var(--color-text-subtle);
+}
