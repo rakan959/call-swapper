@@ -1988,3 +1988,31 @@ body {
   font-size: 0.72rem;
   color: var(--color-text-subtle);
 }
+
+/* Two-panel workspace: calendar beside the selected-shift sidebar (desktop only) */
+.app__workspace {
+  display: contents;
+}
+
+@media (min-width: 960px) {
+  .app__workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1.75rem;
+    align-items: start;
+  }
+
+  .app__workspace .calendar-panel {
+    grid-column: 1;
+    min-width: 0;
+  }
+
+  .app__workspace .side-panel {
+    grid-column: 2;
+    width: 360px;
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+  }
+}

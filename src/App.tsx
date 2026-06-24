@@ -1506,33 +1506,35 @@ export default function App(): JSX.Element {
       </header>
 
       <main className="app__main">
-        <section className="calendar-panel" aria-label="Call schedule calendar">
-          <div
-            ref={calendarContainerRef}
-            className="calendar-panel__calendar"
-            aria-live="polite"
-            aria-busy={loadState === 'loading'}
-          />
-        </section>
+        <div className="app__workspace">
+          <section className="calendar-panel" aria-label="Call schedule calendar">
+            <div
+              ref={calendarContainerRef}
+              className="calendar-panel__calendar"
+              aria-live="polite"
+              aria-busy={loadState === 'loading'}
+            />
+          </section>
 
-        {selectedShift && selectedPalette && dataset && (
-          <div className="side-panel-layer">
-            <button
-              type="button"
-              className="side-panel-layer__scrim"
-              aria-label="Dismiss shift details overlay"
-              onClick={() => setSelectedShiftId(null)}
-            />
-            <SidePanel
-              shift={selectedShift}
-              resident={selectedResident}
-              palette={selectedPalette}
-              dataset={dataset}
-              swapSettings={swapSettings}
-              onClose={() => setSelectedShiftId(null)}
-            />
-          </div>
-        )}
+          {selectedShift && selectedPalette && dataset && (
+            <div className="side-panel-layer">
+              <button
+                type="button"
+                className="side-panel-layer__scrim"
+                aria-label="Dismiss shift details overlay"
+                onClick={() => setSelectedShiftId(null)}
+              />
+              <SidePanel
+                shift={selectedShift}
+                resident={selectedResident}
+                palette={selectedPalette}
+                dataset={dataset}
+                swapSettings={swapSettings}
+                onClose={() => setSelectedShiftId(null)}
+              />
+            </div>
+          )}
+        </div>
         <section className="best-swaps-panel" aria-label="Find best swaps">
           <header className="best-swaps-panel__header">
             <div>

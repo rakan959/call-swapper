@@ -553,7 +553,9 @@ describe('App side panel selection', () => {
     expect(detailsId).toBeTruthy();
     expect(firstRowButton.getAttribute('aria-expanded')).toBe('false');
     expect(firstRowButton.textContent ?? '').toContain('Diana Flores');
-    expect(firstRowButton.textContent ?? '').toContain('+174.00');
+    // redesigned card: quiet rank + rule chip instead of a raw score
+    expect(firstRowButton.textContent ?? '').toContain('#1');
+    expect(firstRowButton.textContent ?? '').toContain('No caveats');
     fireEvent.click(firstRowButton);
 
     await waitFor(() => {
