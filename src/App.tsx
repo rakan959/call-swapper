@@ -1111,7 +1111,12 @@ export default function App(): JSX.Element {
       <header className="app__header">
         <div className="app__header-inner">
           <div className="app__header-primary">
-            <h1 id="app-title">Call Swap Finder</h1>
+            <div className="app__brand">
+              <span className="app__logo" aria-hidden="true">
+                ⇄
+              </span>
+              <h1 id="app-title">Call Swap Finder</h1>
+            </div>
             <p className="app__tagline">
               View the call schedule, switch between month and week views, and understand shift
               types at a glance.
