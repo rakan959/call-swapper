@@ -17,26 +17,20 @@
     "check:pr": "node --loader ts-node/esm tools/require_tests_changed.ts"
   },
   "dependencies": {
-    "@fullcalendar/core": "^6.1.15",
-    "@fullcalendar/daygrid": "^6.1.15",
-    "@fullcalendar/interaction": "^6.1.15",
-    "@fullcalendar/list": "^6.1.15",
-    "@fullcalendar/timegrid": "^6.1.15",
     "@tanstack/react-table": "^8.20.5",
     "dayjs": "^1.11.13",
-    "fullcalendar": "^6.1.15",
     "papaparse": "^5.4.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@rollup/wasm-node": "^4.52.4",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^20.12.12",
     "@types/papaparse": "^5.3.16",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "@rollup/wasm-node": "^4.52.4",
     "@vitejs/plugin-react": "^5.0.4",
     "@vitest/coverage-v8": "^3.2.4",
     "eslint": "^9.9.0",

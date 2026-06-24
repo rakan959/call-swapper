@@ -1,11 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import dayjs from '@utils/dayjs';
-import { Calendar, EventSourceInput } from '@fullcalendar/core';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import interactionPlugin from '@fullcalendar/interaction';
-import listPlugin from '@fullcalendar/list';
 import {
   Dataset,
   Resident,
@@ -28,6 +23,7 @@ import {
 import { attachRotationsBySurname } from '@utils/rotationJoin';
 import { findBestSwaps, SwapRejectionDetail, SwapSearchResult } from '@engine/swapEngine';
 import SidePanel from './components/SidePanel';
+import MonthGrid from './components/MonthGrid';
 import { SHIFT_PALETTE, LegendPaletteEntry } from './components/Legend';
 import PressureBreakdown from './components/PressureBreakdown';
 import { formatScore } from '@utils/score';
@@ -505,8 +501,6 @@ export default function App(): JSX.Element {
     Boolean(initialSwapSettings.showRejectedSwaps || initialSwapSettings.showShabbosRejectedSwaps),
   );
 
-  const calendarContainerRef = useRef<HTMLDivElement | null>(null);
-  const calendarRef = useRef<Calendar | null>(null);
   const bestSwapsRequestTokenRef = useRef(0);
   const swapSettingsContainerRef = useRef<HTMLDivElement | null>(null);
   const hasAnnouncedDebugMenuRef = useRef(false);
@@ -627,85 +621,6 @@ export default function App(): JSX.Element {
     }
     return swapSettings.defaultSortDirection === 'desc' ? 'High → Low' : 'Low → High';
   }, [swapSettings.defaultSortDirection, swapSettings.defaultSortKey]);
-
-  useEffect(() => {
-    const container = calendarContainerRef.current;
-    if (!container) {
-      return;
-    }
-
-    const supportsMatchMedia =
-      typeof window !== 'undefined' && typeof window.matchMedia === 'function';
-    const mediaQuery = supportsMatchMedia ? window.matchMedia('(max-width: 768px)') : null;
-
-    const resolveHeaderToolbar = (compact: boolean) => ({
-      left: 'prev,next today',
-      center: 'title',
-      right: compact ? 'listWeek,dayGridMonth' : 'dayGridMonth,timeGridWeek',
-    });
-
-    const initialCompact = mediaQuery?.matches ?? false;
-
-    const calendar = new Calendar(container, {
-      plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin],
-      initialView: initialCompact ? 'listWeek' : 'dayGridMonth',
-      headerToolbar: resolveHeaderToolbar(initialCompact),
-      height: 'auto',
-      stickyHeaderDates: !initialCompact,
-      expandRows: true,
-      eventDisplay: 'block',
-      events: [],
-      datesSet: () => {
-        rotationColumnSyncRef.current();
-      },
-      eventClick: (info) => {
-        setSelectedShiftId(info.event.id);
-      },
-    });
-
-    const applyResponsiveOptions = (compact: boolean) => {
-      calendar.setOption('headerToolbar', resolveHeaderToolbar(compact));
-      calendar.setOption('stickyHeaderDates', !compact);
-      if (compact) {
-        if (calendar.view?.type !== 'listWeek') {
-          calendar.changeView('listWeek');
-        }
-      } else if (calendar.view?.type === 'listWeek') {
-        calendar.changeView('dayGridMonth');
-      }
-    };
-
-    let handleMediaChange: ((event: MediaQueryListEvent) => void) | null = null;
-    if (mediaQuery) {
-      handleMediaChange = (event) => {
-        applyResponsiveOptions(event.matches);
-      };
-
-      if (typeof mediaQuery.addEventListener === 'function') {
-        mediaQuery.addEventListener('change', handleMediaChange);
-      } else if (typeof mediaQuery.addListener === 'function') {
-        mediaQuery.addListener(handleMediaChange);
-      }
-    }
-
-    calendar.render();
-    calendarRef.current = calendar;
-    rotationColumnSyncRef.current();
-
-    applyResponsiveOptions(initialCompact);
-
-    return () => {
-      if (mediaQuery && handleMediaChange) {
-        if (typeof mediaQuery.removeEventListener === 'function') {
-          mediaQuery.removeEventListener('change', handleMediaChange);
-        } else if (typeof mediaQuery.removeListener === 'function') {
-          mediaQuery.removeListener(handleMediaChange);
-        }
-      }
-      calendar.destroy();
-      calendarRef.current = null;
-    };
-  }, []);
 
   const residentOptions = useMemo(() => {
     if (!dataset) {
@@ -890,23 +805,6 @@ export default function App(): JSX.Element {
   const isBestSwapsActionDisabled =
     !dataset || loadState !== 'ready' || !selectedResidentId || bestSwapsState.status === 'loading';
 
-  const events = useMemo<EventSourceInput>(() => {
-    return visibleShifts.map((shift) => {
-      const palette = SHIFT_PALETTE[shift.type];
-      return {
-        id: shift.id,
-        title: palette.label,
-        start: shift.startISO,
-        end: shift.endISO,
-        backgroundColor: palette.background,
-        borderColor: palette.border,
-        textColor: palette.text,
-        display: 'block',
-        classNames: selectedShiftId === shift.id ? ['fc-event--selected'] : [],
-      };
-    });
-  }, [visibleShifts, selectedShiftId]);
-
   const selectedShift = useMemo(() => {
     if (!dataset || !selectedShiftId) {
       return null;
@@ -921,172 +819,9 @@ export default function App(): JSX.Element {
     return dataset.residents.find((resident) => resident.id === selectedShift.residentId);
   }, [dataset, selectedShift]);
 
-  const syncRotationColumn = useCallback(() => {
-    const calendarInstance = calendarRef.current;
-    const container = calendarContainerRef.current;
-    if (!container) {
-      return;
-    }
-
-    const applyAriaColIndices = (
-      cells: ArrayLike<HTMLTableCellElement>,
-      startIndex: number,
-    ): void => {
-      for (let offset = 0; offset < cells.length; offset += 1) {
-        const cell = cells[offset];
-        if (cell) {
-          cell.setAttribute('aria-colindex', `${startIndex + offset}`);
-        }
-      }
-    };
-
-    const removeRotationColumn = (): void => {
-      container.querySelectorAll('.calendar-rotation-header').forEach((node) => node.remove());
-      container.querySelectorAll('.calendar-rotation-cell').forEach((node) => node.remove());
-
-      const headerRowEl = container.querySelector('.fc-col-header thead tr');
-      if (headerRowEl) {
-        applyAriaColIndices(headerRowEl.querySelectorAll('th'), 1);
-      }
-
-      container
-        .querySelectorAll<HTMLTableRowElement>('.fc-daygrid-body tbody tr')
-        .forEach((row) => {
-          applyAriaColIndices(row.querySelectorAll<HTMLTableCellElement>('td[data-date]'), 1);
-        });
-    };
-
-    removeRotationColumn();
-
-    if (!calendarInstance || calendarInstance.view?.type !== 'dayGridMonth' || !filteredResident) {
-      return;
-    }
-
-    const resolveWeekStart = (
-      firstDateAttr: string | null,
-    ): { mondayKey: string; monday: dayjs.Dayjs } | null => {
-      if (!firstDateAttr) {
-        return null;
-      }
-
-      let monday = dayjs.utc(firstDateAttr, 'YYYY-MM-DD', true);
-      if (!monday.isValid()) {
-        monday = dayjs.utc(firstDateAttr);
-      }
-      if (!monday.isValid()) {
-        return null;
-      }
-
-      const dayOfWeek = monday.day();
-      if (dayOfWeek === 0) {
-        monday = monday.add(1, 'day');
-      } else if (dayOfWeek > 1) {
-        monday = monday.subtract(dayOfWeek - 1, 'day');
-      }
-
-      return { mondayKey: monday.format('YYYY-MM-DD'), monday };
-    };
-
-    const today = dayjs.utc().startOf('day');
-
-    const createRotationCell = (
-      mondayKey: string,
-      monday: dayjs.Dayjs,
-      assignment: RotationAssignment | undefined,
-    ): HTMLTableCellElement => {
-      const rotationCell = document.createElement('td');
-      rotationCell.className = 'calendar-rotation-cell';
-      rotationCell.setAttribute('role', 'gridcell');
-      rotationCell.setAttribute('aria-colindex', '1');
-      rotationCell.setAttribute('data-rotation-week', mondayKey);
-
-      if (assignment) {
-        rotationCell.textContent = assignment.rotation;
-        if (assignment.rawRotation && assignment.rawRotation !== assignment.rotation) {
-          rotationCell.title = assignment.rawRotation;
-        }
-        const weekEnd = monday.add(6, 'day');
-        if (!today.isBefore(monday) && !today.isAfter(weekEnd)) {
-          rotationCell.classList.add('calendar-rotation-cell--current');
-        }
-      } else {
-        rotationCell.textContent = '—';
-        rotationCell.classList.add('calendar-rotation-cell--empty');
-      }
-
-      return rotationCell;
-    };
-
-    const updateWeekRow = (row: HTMLTableRowElement): void => {
-      const dayCells = Array.from(row.querySelectorAll<HTMLTableCellElement>('td[data-date]'));
-      if (dayCells.length === 0) {
-        return;
-      }
-
-      const firstCell = dayCells[0] ?? null;
-      const weekInfo = resolveWeekStart(firstCell ? firstCell.getAttribute('data-date') : null);
-      if (!weekInfo) {
-        return;
-      }
-
-      const assignment = rotationAssignmentsByWeek.get(weekInfo.mondayKey);
-      const rotationCell = createRotationCell(weekInfo.mondayKey, weekInfo.monday, assignment);
-      row.insertBefore(rotationCell, row.firstChild);
-      applyAriaColIndices(dayCells, 2);
-    };
-
-    const headerRow = container.querySelector('.fc-col-header thead tr');
-    if (headerRow) {
-      const rotationHeader = document.createElement('th');
-      rotationHeader.className = 'calendar-rotation-header';
-      rotationHeader.setAttribute('role', 'columnheader');
-      rotationHeader.setAttribute('aria-colindex', '1');
-
-      const rotationLabel = document.createElement('span');
-      rotationLabel.className = 'calendar-rotation-header__subtitle';
-      rotationLabel.textContent = 'Rotation';
-
-      const rotationResident = document.createElement('span');
-      rotationResident.className = 'calendar-rotation-header__title';
-      rotationResident.textContent = filteredResident.name;
-
-      rotationHeader.append(rotationLabel, rotationResident);
-      rotationHeader.title = `${filteredResident.name} rotation schedule`;
-      headerRow.insertBefore(rotationHeader, headerRow.firstChild);
-      applyAriaColIndices(headerRow.querySelectorAll('th'), 1);
-    }
-
-    const weekRows = container.querySelectorAll<HTMLTableRowElement>('.fc-daygrid-body tbody tr');
-    weekRows.forEach(updateWeekRow);
-  }, [filteredResident, rotationAssignmentsByWeek]);
-
-  const rotationColumnSyncRef = useRef<() => void>(() => {});
-  rotationColumnSyncRef.current = syncRotationColumn;
-
   const selectedPalette: LegendPaletteEntry | null = selectedShift
     ? SHIFT_PALETTE[selectedShift.type]
     : null;
-
-  useEffect(() => {
-    const calendar = calendarRef.current;
-    if (!calendar) {
-      return;
-    }
-
-    calendar.removeAllEventSources();
-    calendar.addEventSource(events);
-    syncRotationColumn();
-  }, [events, syncRotationColumn]);
-
-  useEffect(() => {
-    syncRotationColumn();
-  }, [rotationAssignmentsByWeek, syncRotationColumn]);
-
-  useEffect(() => {
-    if (loadState === 'ready') {
-      syncRotationColumn();
-    }
-  }, [loadState, syncRotationColumn]);
 
   useEffect(() => {
     const runtimeWindow = window as typeof window & {
@@ -1505,14 +1240,23 @@ export default function App(): JSX.Element {
         </div>
       </header>
 
-      <main className="app__main">
+      <main
+        className={`app__main${selectedShift && selectedPalette && dataset ? ' app__main--detail' : ''}`}
+      >
         <section className="calendar-panel" aria-label="Call schedule calendar">
           <div
-            ref={calendarContainerRef}
             className="calendar-panel__calendar"
             aria-live="polite"
             aria-busy={loadState === 'loading'}
-          />
+          >
+            <MonthGrid
+              shifts={visibleShifts}
+              selectedShiftId={selectedShiftId}
+              onSelectShift={setSelectedShiftId}
+              rotationByWeek={rotationAssignmentsByWeek}
+              residentName={filteredResident?.name ?? null}
+            />
+          </div>
         </section>
 
         {selectedShift && selectedPalette && dataset && (

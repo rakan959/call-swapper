@@ -12,39 +12,6 @@ import { isWeekendOrHoliday } from '../../src/domain/calendar';
 
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
-type CalendarEvent = {
-  id: string;
-};
-
-type CalendarHeaderToolbar = {
-  left?: string;
-  center?: string;
-  right?: string;
-};
-
-type CalendarOptions = {
-  initialView?: string;
-  headerToolbar?: CalendarHeaderToolbar;
-  stickyHeaderDates?: boolean;
-  datesSet?: () => void;
-  eventClick?: (info: { event: { id: string } }) => void;
-  events?: CalendarEvent[];
-};
-
-type CalendarStubInstance = {
-  options: CalendarOptions;
-  eventSources: CalendarEvent[][];
-  render(): void;
-  destroy(): void;
-  removeAllEventSources(): void;
-  addEventSource(events: CalendarEvent[]): void;
-  setOption(name: string, value: unknown): void;
-  changeView(viewName: string): void;
-  view: { type: string };
-};
-
-const calendarInstances = vi.hoisted(() => [] as CalendarStubInstance[]);
-
 const parseCsvToDatasetMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@utils/csv', () => {
@@ -53,51 +20,6 @@ vi.mock('@utils/csv', () => {
     parseCsvToDataset: parseCsvToDatasetMock,
     CsvValidationError,
   };
-});
-
-vi.mock('@fullcalendar/core', () => {
-  class CalendarStub implements CalendarStubInstance {
-    public options: CalendarOptions;
-    public eventSources: CalendarEvent[][] = [];
-    public view: { type: string };
-
-    constructor(_element: HTMLElement, options: CalendarOptions) {
-      this.options = { ...options };
-      this.view = { type: options.initialView ?? 'dayGridMonth' };
-      calendarInstances.push(this);
-    }
-
-    render(): void {
-      return;
-    }
-
-    destroy(): void {
-      return;
-    }
-
-    removeAllEventSources(): void {
-      this.eventSources = [];
-    }
-
-    addEventSource(events: CalendarEvent[]): void {
-      this.eventSources.push(events);
-    }
-
-    setOption(name: string, value: unknown): void {
-      if (name === 'headerToolbar') {
-        this.options.headerToolbar = value as CalendarHeaderToolbar;
-      } else if (name === 'stickyHeaderDates') {
-        this.options.stickyHeaderDates = value as boolean;
-      }
-    }
-
-    changeView(viewName: string): void {
-      this.view = { type: viewName };
-      this.options.datesSet?.();
-    }
-  }
-
-  return { Calendar: CalendarStub };
 });
 
 const findSwapsForShiftMock = vi.hoisted(() => vi.fn());
@@ -123,6 +45,12 @@ const showDebugSettings = async (): Promise<void> => {
     runtimeWindow.swapFinderDebug?.showDebugMenu();
   });
 };
+
+/** Opens the side panel by clicking the target shift (S1, Oct 1) pill in the month grid. */
+async function clickShiftS1(): Promise<void> {
+  const pill = await screen.findByRole('button', { name: /shift on Oct 1, 2026/i });
+  fireEvent.click(pill);
+}
 
 const CSV = `Shift ID,Resident,Resident ID,Start,End,Type,Location
 S1,Alice Rivers,R1,2026-10-01T08:00:00Z,2026-10-01T20:00:00Z,MOSES,Main
@@ -419,7 +347,6 @@ let dateNowSpy: ReturnType<typeof vi.spyOn> | null = null;
 describe('App side panel selection', () => {
   beforeEach(() => {
     dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-09-30T12:00:00Z').getTime());
-    calendarInstances.length = 0;
     (window as typeof window & { CSV_URL?: string }).CSV_URL = 'test://schedule.csv';
     const fetchMock = vi.fn(async () => ({
       ok: true,
@@ -435,7 +362,6 @@ describe('App side panel selection', () => {
 
   afterEach(() => {
     cleanup();
-    calendarInstances.length = 0;
     delete (window as typeof window & { CSV_URL?: string }).CSV_URL;
     if (originalFetch) {
       global.fetch = originalFetch;
@@ -455,19 +381,11 @@ describe('App side panel selection', () => {
   it('opens the side panel with the selected shift details after an event click', async () => {
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
     expect(screen.queryByText('S1')).toBeNull();
 
-    const calendar = calendarInstances[0];
-    expect(calendar).toBeDefined();
-    expect(calendar?.options.eventClick).toBeTypeOf('function');
-
-    act(() => {
-      calendar?.options.eventClick?.({ event: { id: 'S1' } });
-    });
+    await clickShiftS1();
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Alice Rivers' })).toBeTruthy();
@@ -490,16 +408,9 @@ describe('App side panel selection', () => {
   it('clears the selection when the resident filter hides the shift', async () => {
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
-    const calendar = calendarInstances[0];
-    expect(calendar).toBeDefined();
-
-    act(() => {
-      calendar?.options.eventClick?.({ event: { id: 'S1' } });
-    });
+    await clickShiftS1();
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Alice Rivers' })).toBeTruthy();
@@ -524,17 +435,12 @@ describe('App side panel selection', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
     const residentSelect = screen.getByLabelText('Filter by resident');
     fireEvent.change(residentSelect, { target: { value: '' } });
 
-    const calendar = calendarInstances[0];
-    act(() => {
-      calendar?.options.eventClick?.({ event: { id: 'S1' } });
-    });
+    await clickShiftS1();
 
     await screen.findByRole('heading', { name: 'Alice Rivers' });
     const swapSection = await screen.findByRole('region', { name: /swap finder/i });
@@ -590,17 +496,12 @@ describe('App side panel selection', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
     const residentSelect = screen.getByLabelText('Filter by resident');
     fireEvent.change(residentSelect, { target: { value: '' } });
 
-    const calendar = calendarInstances[0];
-    act(() => {
-      calendar?.options.eventClick?.({ event: { id: 'S1' } });
-    });
+    await clickShiftS1();
 
     await screen.findByRole('heading', { name: 'Alice Rivers' });
     const swapSection = await screen.findByRole('region', { name: /swap finder/i });
@@ -682,17 +583,12 @@ describe('App side panel selection', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
     const residentSelect = screen.getByLabelText('Filter by resident');
     fireEvent.change(residentSelect, { target: { value: '' } });
 
-    const calendar = calendarInstances[0];
-    act(() => {
-      calendar?.options.eventClick?.({ event: { id: 'S1' } });
-    });
+    await clickShiftS1();
 
     const swapSection = await screen.findByRole('region', { name: /swap finder/i });
     const action = within(swapSection).getByRole('button', { name: /find swaps/i });
@@ -740,14 +636,9 @@ describe('App side panel selection', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
-    const calendar = calendarInstances[0];
-    act(() => {
-      calendar?.options.eventClick?.({ event: { id: 'S1' } });
-    });
+    await clickShiftS1();
 
     const swapSection = await screen.findByRole('region', { name: /swap finder/i });
     const action = within(swapSection).getByRole('button', { name: /find swaps/i });
@@ -795,9 +686,7 @@ describe('App side panel selection', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
     const residentSelect = screen.getByLabelText('Filter by resident');
     fireEvent.change(residentSelect, { target: { value: 'R1' } });
@@ -860,9 +749,7 @@ describe('App side panel selection', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
     const residentSelect = screen.getByLabelText('Filter by resident');
     fireEvent.change(residentSelect, { target: { value: 'R1' } });
@@ -930,9 +817,7 @@ describe('App side panel selection', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
     const residentSelect = screen.getByLabelText('Filter by resident');
     fireEvent.change(residentSelect, { target: { value: 'R1' } });
@@ -1002,9 +887,7 @@ describe('App side panel selection', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
     const settingsToggle = screen.getByRole('button', { name: 'Settings' });
     fireEvent.click(settingsToggle);
@@ -1076,9 +959,7 @@ describe('App side panel selection', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
     const residentSelect = screen.getByLabelText('Filter by resident');
     fireEvent.change(residentSelect, { target: { value: 'R1' } });
@@ -1160,9 +1041,7 @@ describe('App side panel selection', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
     const residentSelect = screen.getByLabelText('Filter by resident');
     fireEvent.change(residentSelect, { target: { value: 'R1' } });
@@ -1229,9 +1108,7 @@ describe('App side panel selection', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
     const residentSelect = screen.getByLabelText('Filter by resident');
     fireEvent.change(residentSelect, { target: { value: 'R1' } });
@@ -1272,9 +1149,7 @@ describe('App side panel selection', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(calendarInstances[0]?.eventSources[0]?.length).toBeGreaterThan(0);
-    });
+    await screen.findByText(/shifts across/i);
 
     const residentSelect = screen.getByLabelText('Filter by resident');
     fireEvent.change(residentSelect, { target: { value: 'R1' } });
